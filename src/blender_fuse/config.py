@@ -347,6 +347,17 @@ class AnalysisConfig:
         self.provenance.validate()
         if self.resume.enabled and self.piv.enabled:
             raise ValueError("Resume with PIV is not supported in Blender Fuse 0.2.")
+        effective_video_sources = (
+            self.outputs.save_order_images
+            or (self.outputs.save_smoothed_images and self.smooth_neighbors > 0)
+            or (self.outputs.save_fourier_images and self.fourier_rect is not None)
+            or (self.outputs.save_fourier_v2_images and self.fourier_v2.enabled)
+        )
+        if self.outputs.save_videos and not effective_video_sources:
+            raise ValueError(
+                "Video output requires an image sequence enabled by the analysis "
+                "configuration."
+            )
 
 
 def polygon_from_sequence(points: Sequence[Sequence[float]]) -> Tuple[PointXY, ...]:

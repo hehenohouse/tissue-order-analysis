@@ -103,3 +103,21 @@ def test_resume_rejects_piv_and_video_requires_images(tmp_path: Path) -> None:
                 save_videos=True,
             ),
         ).validate()
+
+
+def test_disabled_v2_images_do_not_count_as_video_source(tmp_path: Path) -> None:
+    from blender_fuse import OutputOptions
+
+    outputs = OutputOptions(
+        save_order_images=False,
+        save_smoothed_images=False,
+        save_fourier_images=False,
+        save_fourier_v2_images=True,
+        save_videos=True,
+    )
+    with pytest.raises(ValueError, match="image sequence"):
+        AnalysisConfig(
+            data_dir=tmp_path,
+            fourier_rect=None,
+            outputs=outputs,
+        ).validate()
