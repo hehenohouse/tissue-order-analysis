@@ -63,7 +63,17 @@ def test_end_to_end_pipeline_writes_numeric_not_rgb_psi(tmp_path: Path, write_se
 
     array_path = output_dir / "data" / "order" / "order_T0001.npz"
     with np.load(array_path) as saved:
+        assert set(saved.files) == {
+            "labels",
+            "centroids_rc",
+            "psi",
+            "psi_magnitude",
+            "psi_magnitude_map",
+            "smoothed_magnitude",
+            "smoothed_magnitude_map",
+        }
         assert saved["psi_magnitude_map"].ndim == 2
+        assert saved["smoothed_magnitude_map"].ndim == 2
         assert saved["psi"].ndim == 1
         assert np.iscomplexobj(saved["psi"])
     assert (output_dir / "data" / "spatial_statistics.csv").exists()
