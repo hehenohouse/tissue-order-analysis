@@ -20,7 +20,8 @@ def label_segmentation(
 
     if segmentation.ndim != 2:
         raise ValueError(f"segmentation must be 2-D; got shape {segmentation.shape}.")
-    labels = measure.label(segmentation, connectivity=1)
+    # Match skimage's historical 2-D default used by the original analysis: 8-connectivity.
+    labels = measure.label(segmentation, connectivity=segmentation.ndim)
     regions = measure.regionprops(labels)
     if regions:
         centroids = np.asarray([region.centroid for region in regions], dtype=float)

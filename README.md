@@ -160,7 +160,7 @@ PIV ROI time alignment is:
 
 ### Weighted Voronoi ψₙ
 
-For each region centroid `i`, Blender Fuse uses finite Voronoi ridges to calculate:
+Foreground pixels are grouped into regions with 8-neighbor connectivity, matching the original 2-D `skimage.measure.label` behavior. For each region centroid `i`, Blender Fuse uses finite Voronoi ridges to calculate:
 
 ```text
 ψₙ(i) = Σⱼ wᵢⱼ exp(i n θᵢⱼ) / Σⱼ wᵢⱼ

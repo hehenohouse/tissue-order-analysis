@@ -3,6 +3,7 @@ import numpy as np
 from blender_fuse.order import (
     compute_order_parameter,
     compute_periodic_order_parameter,
+    label_segmentation,
     shift_image_rows,
     shift_points_for_display,
     smooth_order_magnitudes,
@@ -18,6 +19,15 @@ def triangular_lattice(rows: int = 7, columns: int = 7) -> np.ndarray:
             x = column + 0.5 * (row % 2)
             points.append((y, x))
     return np.asarray(points, dtype=float)
+
+
+def test_label_segmentation_preserves_diagonal_connectivity() -> None:
+    segmentation = np.asarray([[True, False], [False, True]], dtype=bool)
+
+    labels, centroids = label_segmentation(segmentation)
+
+    assert labels.max() == 1
+    np.testing.assert_allclose(centroids, [[0.5, 0.5]])
 
 
 def test_hexagonal_lattice_has_high_interior_psi6() -> None:
