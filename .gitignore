@@ -1,0 +1,45 @@
+# Raw research data and generated analyses
+raw_data/
+analysis_output/
+outputs/
+test_output/
+piv_frames/
+videos/
+*.h5
+*.hdf5
+*.mat
+*.mltbx
+*.tif
+*.tiff
+*.mov
+*.mp4
+*.zip
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv/
+venv/
+*.egg-info/
+.eggs/
+
+# Build, test, and coverage output
+build/
+dist/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.tox/
+
+# IDE and OS
+.idea/
+.vscode/
+*.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
