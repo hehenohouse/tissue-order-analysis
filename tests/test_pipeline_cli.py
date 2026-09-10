@@ -224,3 +224,42 @@ def test_fourier_v2_pipeline_writes_separate_versioned_products(
     assert (output_dir / "images/fourier_v2/fourier_v2_T0001.png").is_file()
     assert (output_dir / "images/fourier_v2_radial/radial_v2_T0001.png").is_file()
     assert (output_dir / "images/fourier_v2_metrics.png").is_file()
+
+
+def test_fourier_v2_table_switch_covers_frame_and_aggregate_tables(
+    tmp_path: Path, write_segmentation
+) -> None:
+    from blender_fuse import FourierV2Config
+
+    data_dir = tmp_path / "data"
+    write_segmentation(
+        data_dir,
+        1,
+        [(3, 3), (3, 8), (8, 3), (8, 8)],
+        shape=(16, 16),
+    )
+    output_dir = tmp_path / "result"
+    run_analysis(
+        AnalysisConfig(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            start_t=1,
+            end_t=1,
+            fourier_rect=(0, 16, 0, 16),
+            fourier_v2=FourierV2Config(
+                enabled=True,
+                window="none",
+                min_frequency_cycles_per_pixel=0.05,
+                max_frequency_cycles_per_pixel=0.25,
+            ),
+            outputs=minimal_outputs(
+                retain_frame_data=False,
+                save_fourier_v2_arrays=False,
+                save_fourier_v2_images=False,
+                save_fourier_v2_tables=False,
+            ),
+        )
+    )
+    assert not (output_dir / "data/fourier_v2_metrics.csv").exists()
+    assert not (output_dir / "data/frequency_pairs_v2").exists()
+    assert not (output_dir / "data/radial_profiles_v2").exists()

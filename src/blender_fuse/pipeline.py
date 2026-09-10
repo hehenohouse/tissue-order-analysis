@@ -833,7 +833,8 @@ def _write_run_outputs(
     ):
         paths.append(_write_bootstrap_statistics(result, output_dir))
     if config.fourier_v2.enabled:
-        paths.append(_write_fourier_v2_metrics(result, output_dir))
+        if config.outputs.save_fourier_v2_tables:
+            paths.append(_write_fourier_v2_metrics(result, output_dir))
         if config.outputs.save_fourier_v2_images and result.frames:
             assert config.fourier_v2.min_frequency_cycles_per_pixel is not None
             assert config.fourier_v2.max_frequency_cycles_per_pixel is not None
