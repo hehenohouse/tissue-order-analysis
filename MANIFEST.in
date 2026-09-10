@@ -3,4 +3,5 @@ include README.md
 include code_2.py
 include create_piv_static_frames.py
 recursive-include examples *.py
+recursive-include examples *.json
 recursive-include tests *.py
