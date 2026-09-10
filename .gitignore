@@ -1,6 +1,6 @@
 # Raw research data and generated analyses
 raw_data/
-analysis_output/
+analysis_output*/
 outputs/
 test_output/
 piv_frames/
