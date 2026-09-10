@@ -120,3 +120,107 @@ def test_cli_parser_and_help_are_available(capsys) -> None:
     assert args.no_fourier
     assert main([]) == 0
     assert "Analyze tissue order" in capsys.readouterr().out
+
+
+def test_legacy_csv_headers_remain_locked(tmp_path: Path, write_segmentation) -> None:
+    import csv
+
+    data_dir = tmp_path / "data"
+    write_segmentation(
+        data_dir,
+        1,
+        [(3, 3), (3, 8), (8, 3), (8, 8)],
+        shape=(16, 16),
+    )
+    output_dir = tmp_path / "result"
+    run_analysis(
+        AnalysisConfig(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            start_t=1,
+            end_t=1,
+            fourier_rect=(0, 16, 0, 16),
+            outputs=minimal_outputs(retain_frame_data=False),
+        )
+    )
+    with (output_dir / "data/frame_metrics.csv").open(newline="", encoding="utf-8") as handle:
+        assert next(csv.reader(handle)) == [
+            "timepoint",
+            "source_path",
+            "region_count",
+            "mean_psi_magnitude",
+            "mean_smoothed_psi_magnitude",
+            "fourier_metric",
+        ]
+    with (output_dir / "data/spatial_statistics.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        assert next(csv.reader(handle)) == [
+            "timepoint",
+            "correlation",
+            "correlation_p_value",
+            "correlation_q_value_bh",
+            "anova_f_statistic",
+            "anova_p_value",
+            "anova_q_value_bh",
+            "pearson_conclusion",
+            "anova_conclusion",
+        ]
+
+
+def test_fourier_v2_pipeline_writes_separate_versioned_products(
+    tmp_path: Path, write_segmentation
+) -> None:
+    import csv
+
+    from blender_fuse import FourierV2Config
+
+    data_dir = tmp_path / "data"
+    points = [(row, column) for row in range(2, 16, 4) for column in range(2, 16, 4)]
+    write_segmentation(data_dir, 1, points, shape=(20, 20))
+    output_dir = tmp_path / "result"
+    outputs = minimal_outputs(
+        retain_frame_data=False,
+        save_fourier_v2_images=True,
+        save_fourier_v2_arrays=True,
+        save_fourier_v2_tables=True,
+    )
+    run_analysis(
+        AnalysisConfig(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            start_t=1,
+            end_t=1,
+            fourier_rect=(0, 20, 0, 20),
+            fourier_v2=FourierV2Config(
+                enabled=True,
+                window="hann",
+                min_frequency_cycles_per_pixel=0.05,
+                max_frequency_cycles_per_pixel=0.25,
+                top_pairs=3,
+            ),
+            outputs=outputs,
+        )
+    )
+    with np.load(output_dir / "data/fourier_v2/fourier_v2_T0001.npz") as saved:
+        assert saved["schema_version"].item() == "blender-fuse.fourier-v2.v1"
+        assert saved["eligible_mask"].dtype == np.bool_
+        assert saved["radial_counts"].sum() == 20 * 20 - 1
+        assert "peak_radial_frequency_cycles_per_pixel" in saved.files
+        assert "eligible_power_fraction" in saved.files
+    with (output_dir / "data/fourier_v2_metrics.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        assert next(csv.reader(handle)) == [
+            "timepoint",
+            "metric",
+            "dominant_radial_frequency_cycles_per_pixel",
+            "dominant_wavelength_pixels",
+            "low_frequency_power_fraction",
+            "eligible_power_fraction",
+        ]
+    assert (output_dir / "data/frequency_pairs_v2/pairs_v2_T0001.csv").is_file()
+    assert (output_dir / "data/radial_profiles_v2/radial_v2_T0001.csv").is_file()
+    assert (output_dir / "images/fourier_v2/fourier_v2_T0001.png").is_file()
+    assert (output_dir / "images/fourier_v2_radial/radial_v2_T0001.png").is_file()
+    assert (output_dir / "images/fourier_v2_metrics.png").is_file()

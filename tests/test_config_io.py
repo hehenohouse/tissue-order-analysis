@@ -74,3 +74,32 @@ def test_h5_loader_rejects_non_2d_data(tmp_path: Path) -> None:
         handle.create_dataset("labels", data=np.zeros((2, 3, 4)))
     with pytest.raises(ValueError, match="2 dimensions"):
         load_segmentation_h5(path)
+
+
+def test_background_values_reject_booleans(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="background_values"):
+        AnalysisConfig(data_dir=tmp_path, background_values=(True, 2.0))
+
+
+def test_resume_rejects_piv_and_video_requires_images(tmp_path: Path) -> None:
+    from blender_fuse import OutputOptions, PIVConfig, ResumeConfig
+
+    with pytest.raises(ValueError, match="Resume with PIV"):
+        AnalysisConfig(
+            data_dir=tmp_path,
+            fourier_rect=None,
+            piv=PIVConfig(enabled=True, mat_path=tmp_path / "piv.mat"),
+            resume=ResumeConfig(enabled=True),
+        ).validate()
+    with pytest.raises(ValueError, match="Video output"):
+        AnalysisConfig(
+            data_dir=tmp_path,
+            fourier_rect=None,
+            outputs=OutputOptions(
+                save_order_images=False,
+                save_smoothed_images=False,
+                save_fourier_images=False,
+                save_fourier_v2_images=False,
+                save_videos=True,
+            ),
+        ).validate()
