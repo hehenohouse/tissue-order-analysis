@@ -1,6 +1,7 @@
 # Raw research data and generated analyses
 raw_data/
 analysis_output*/
+local_profiles/
 outputs/
 test_output/
 piv_frames/

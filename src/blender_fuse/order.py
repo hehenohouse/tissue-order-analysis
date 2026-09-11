@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import QhullError, Voronoi, cKDTree
 from skimage import measure
+
+from .config import SegmentationFilterConfig
+from .models import SegmentationQC
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +32,111 @@ def label_segmentation(
     else:
         centroids = np.empty((0, 2), dtype=float)
     return np.asarray(labels, dtype=np.int32), centroids
+
+
+@dataclass
+class ComponentAnalysis:
+    """Raw and retained segmentation products for one frame."""
+
+    raw_labels: NDArray[np.integer]
+    labels: NDArray[np.integer]
+    centroids_rc: NDArray[np.floating]
+    component_areas: NDArray[np.floating]
+    analysis_segmentation: NDArray[np.bool_]
+    quality: SegmentationQC
+
+
+def _area_summary(values: NDArray[np.floating]) -> Tuple[
+    Optional[float], Optional[float], Optional[float], Optional[float]
+]:
+    if values.size == 0:
+        return None, None, None, None
+    return (
+        float(np.min(values)),
+        float(np.median(values)),
+        float(np.mean(values)),
+        float(np.max(values)),
+    )
+
+
+def filter_labeled_components(
+    segmentation: NDArray[np.bool_],
+    settings: SegmentationFilterConfig,
+    *,
+    periodic_y: bool,
+) -> ComponentAnalysis:
+    """Label and optionally filter components while preserving legacy defaults.
+
+    Area bounds are inclusive. Left and right are always image borders; top and
+    bottom count as borders only when vertical periodicity is disabled.
+    """
+
+    source = np.asarray(segmentation, dtype=bool)
+    raw_labels, raw_centroids = label_segmentation(source)
+    raw_count = int(raw_labels.max(initial=0))
+    raw_areas = np.bincount(raw_labels.ravel(), minlength=raw_count + 1)[1:].astype(float)
+
+    rejected_min = np.zeros(raw_count, dtype=bool)
+    rejected_max = np.zeros(raw_count, dtype=bool)
+    rejected_border = np.zeros(raw_count, dtype=bool)
+    if settings.min_area_pixels is not None:
+        rejected_min = raw_areas < settings.min_area_pixels
+    if settings.max_area_pixels is not None:
+        rejected_max = raw_areas > settings.max_area_pixels
+    if settings.exclude_border and raw_count:
+        edge_labels = [raw_labels[:, 0], raw_labels[:, -1]]
+        if not periodic_y:
+            edge_labels.extend((raw_labels[0, :], raw_labels[-1, :]))
+        touching = np.unique(np.concatenate([np.ravel(edge) for edge in edge_labels]))
+        touching = touching[touching > 0]
+        rejected_border[touching - 1] = True
+
+    rejected_any = rejected_min | rejected_max | rejected_border
+    retained = ~rejected_any
+    if not settings.enabled:
+        labels = raw_labels
+        centroids = raw_centroids
+        areas = raw_areas
+        analysis_segmentation = source
+    else:
+        lookup = np.zeros(raw_count + 1, dtype=np.int32)
+        retained_labels = np.flatnonzero(retained) + 1
+        lookup[retained_labels] = np.arange(1, len(retained_labels) + 1, dtype=np.int32)
+        labels = lookup[raw_labels]
+        centroids = raw_centroids[retained]
+        areas = raw_areas[retained]
+        analysis_segmentation = labels > 0
+
+    raw_min, raw_median, raw_mean, raw_max = _area_summary(raw_areas)
+    kept_min, kept_median, kept_mean, kept_max = _area_summary(areas)
+    quality = SegmentationQC(
+        image_height=source.shape[0],
+        image_width=source.shape[1],
+        raw_foreground_pixels=int(np.count_nonzero(source)),
+        retained_foreground_pixels=int(np.count_nonzero(analysis_segmentation)),
+        raw_component_count=raw_count,
+        retained_component_count=len(areas),
+        rejected_any_count=int(np.count_nonzero(rejected_any)),
+        rejected_min_area_count=int(np.count_nonzero(rejected_min)),
+        rejected_max_area_count=int(np.count_nonzero(rejected_max)),
+        rejected_border_count=int(np.count_nonzero(rejected_border)),
+        raw_area_min=raw_min,
+        raw_area_median=raw_median,
+        raw_area_mean=raw_mean,
+        raw_area_max=raw_max,
+        retained_area_min=kept_min,
+        retained_area_median=kept_median,
+        retained_area_mean=kept_mean,
+        retained_area_max=kept_max,
+    )
+    return ComponentAnalysis(
+        raw_labels=raw_labels,
+        labels=np.asarray(labels, dtype=np.int32),
+        centroids_rc=np.asarray(centroids, dtype=float),
+        component_areas=np.asarray(areas, dtype=float),
+        analysis_segmentation=np.asarray(analysis_segmentation, dtype=bool),
+        quality=quality,
+    )
 
 
 def compute_order_parameter(

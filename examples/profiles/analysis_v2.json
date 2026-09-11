@@ -1,0 +1,23 @@
+{
+  "schema_version": "blender-fuse.analysis-profile.v1",
+  "analysis": {
+    "data_dir": "../../raw_data/23C",
+    "output_dir": "../../analysis_output_v2",
+    "start_t": 1,
+    "end_t": 150,
+    "dataset_name": null,
+    "n_fold": 6,
+    "smooth_neighbors": 6,
+    "periodic_y": true,
+    "vertical_shift": 0,
+    "fourier_rect": [700, 900, 800, 1000],
+    "fourier_v2": {
+      "enabled": true,
+      "window": "hann",
+      "min_frequency_cycles_per_pixel": 0.025,
+      "max_frequency_cycles_per_pixel": 0.1,
+      "top_pairs": 5
+    },
+    "resume": {"enabled": true}
+  }
+}

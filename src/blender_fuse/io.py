@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -101,6 +102,70 @@ def _dataset_paths(handle: h5py.File) -> List[str]:
 
     handle.visititems(collect)
     return paths
+
+
+
+@dataclass(frozen=True)
+class H5DatasetInfo:
+    """Read-only structural metadata for one selected segmentation dataset."""
+
+    path: Path
+    dataset_name: str
+    stored_shape: Tuple[int, ...]
+    squeezed_shape: Tuple[int, ...]
+    dtype: str
+
+
+def _selected_dataset_name(handle: h5py.File, dataset_name: Optional[str]) -> str:
+    if dataset_name is None:
+        datasets = _dataset_paths(handle)
+        if not datasets:
+            raise ValueError(f"H5 file contains no datasets: {handle.filename}")
+        return datasets[0]
+    selected = dataset_name.lstrip("/")
+    if selected not in handle:
+        available = _dataset_paths(handle)
+        raise KeyError(
+            f"Dataset {dataset_name!r} is not present in {handle.filename}; "
+            f"available datasets: {available}"
+        )
+    if not isinstance(handle[selected], h5py.Dataset):
+        raise ValueError(f"H5 object {dataset_name!r} is not a dataset.")
+    return selected
+
+
+def inspect_segmentation_h5(
+    path: Path, dataset_name: Optional[str] = None
+) -> H5DatasetInfo:
+    """Inspect a segmentation H5 dataset without reading its pixel payload."""
+
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"Segmentation file does not exist: {source}")
+    with h5py.File(source, "r") as handle:
+        selected = _selected_dataset_name(handle, dataset_name)
+        dataset = handle[selected]
+        assert isinstance(dataset, h5py.Dataset)
+        stored_shape = tuple(int(value) for value in dataset.shape)
+        squeezed_shape = tuple(value for value in stored_shape if value != 1)
+        dtype = np.dtype(dataset.dtype)
+    if len(squeezed_shape) != 2:
+        raise ValueError(
+            f"Segmentation dataset must squeeze to 2 dimensions; got shape "
+            f"{squeezed_shape} from {source}."
+        )
+    if not np.issubdtype(dtype, np.number) and dtype != np.dtype(np.bool_):
+        raise TypeError(
+            f"Segmentation dataset must be numeric or boolean; got {dtype} from {source}."
+        )
+    return H5DatasetInfo(
+        path=source,
+        dataset_name=selected,
+        stored_shape=stored_shape,
+        squeezed_shape=squeezed_shape,
+        dtype=str(dtype),
+    )
+
 
 
 def load_segmentation_h5(

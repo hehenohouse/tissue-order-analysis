@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from skimage.draw import polygon2mask
 
-from .models import FourierResult
+from .models import FourierPeakPair, FourierRadialProfile, FourierResult, FourierV2Result
 
 PointXY = Tuple[float, float]
 
@@ -87,6 +87,207 @@ def analyze_fourier(
         offsets_rc=offsets,
         bin_values=values,
         distances=distances,
+    )
+
+
+def _window_vector(length: int, name: str) -> NDArray[np.floating]:
+    windows = {
+        "none": lambda size: np.ones(size, dtype=float),
+        "hann": np.hanning,
+        "hamming": np.hamming,
+        "blackman": np.blackman,
+    }
+    try:
+        values = windows[name](length)
+    except KeyError as exc:
+        choices = ", ".join(sorted(windows))
+        raise ValueError(f"Unsupported Fourier v2 window {name!r}; choose {choices}.") from exc
+    return np.asarray(values, dtype=float)
+
+
+def _conjugate_shifted_index(
+    index_rc: Tuple[int, int], shape: Tuple[int, int]
+) -> Tuple[int, int]:
+    """Return the shifted-array index of a DFT bin's conjugate partner."""
+
+    partner = []
+    for shifted_index, length in zip(index_rc, shape):
+        unshifted = (int(shifted_index) - length // 2) % length
+        conjugate_unshifted = (-unshifted) % length
+        partner.append((conjugate_unshifted + length // 2) % length)
+    return int(partner[0]), int(partner[1])
+
+
+def _radial_profile(
+    intensity: NDArray[np.floating],
+    radial_frequency: NDArray[np.floating],
+    bin_width: float,
+) -> FourierRadialProfile:
+    maximum = float(np.max(radial_frequency, initial=0.0))
+    edges = np.arange(0.0, maximum + bin_width, bin_width, dtype=float)
+    if len(edges) < 2:
+        edges = np.asarray([0.0, bin_width], dtype=float)
+    if edges[-1] <= maximum:
+        edges = np.append(edges, edges[-1] + bin_width)
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    means = np.full(len(centers), np.nan, dtype=float)
+    totals = np.zeros(len(centers), dtype=float)
+    counts = np.zeros(len(centers), dtype=int)
+    non_dc = radial_frequency > 0
+    assignments = np.digitize(radial_frequency[non_dc], edges, right=False) - 1
+    values = intensity[non_dc]
+    for index in range(len(centers)):
+        selected = assignments == index
+        counts[index] = int(np.count_nonzero(selected))
+        if counts[index]:
+            totals[index] = float(np.sum(values[selected]))
+            means[index] = float(np.mean(values[selected]))
+    return FourierRadialProfile(
+        edges_cycles_per_pixel=edges,
+        centers_cycles_per_pixel=centers,
+        mean_intensity=means,
+        total_power=totals,
+        counts=counts,
+    )
+
+
+def analyze_fourier_v2(
+    image: NDArray[np.generic],
+    rect: Tuple[int, int, int, int],
+    *,
+    min_frequency_cycles_per_pixel: float,
+    max_frequency_cycles_per_pixel: float,
+    window: str = "hann",
+    top_pairs: int = 5,
+    radial_bin_width_cycles_per_pixel: Optional[float] = None,
+) -> FourierV2Result:
+    """Analyze a rectangle with windowing, a physical-frequency band, and pairs."""
+
+    source = np.asarray(image)
+    if source.ndim != 2:
+        raise ValueError(f"Fourier input must be a 2-D scalar image; got {source.shape}.")
+    if not np.all(np.isfinite(source)):
+        raise ValueError("Fourier input contains NaN or infinite values.")
+    validate_rectangle(rect, source.shape)
+    if top_pairs <= 0:
+        raise ValueError("top_pairs must be positive.")
+    bounds = (float(min_frequency_cycles_per_pixel), float(max_frequency_cycles_per_pixel))
+    if not np.all(np.isfinite(bounds)) or bounds[0] < 0 or bounds[1] <= bounds[0]:
+        raise ValueError(
+            "Fourier v2 frequency bounds must be finite, non-negative, and increasing."
+        )
+
+    x1, x2, y1, y2 = rect
+    region = np.asarray(source[y1:y2, x1:x2], dtype=float)
+    height, width = region.shape
+    if window != "none" and min(height, width) < 2:
+        raise ValueError("Windowed Fourier v2 rectangles must be at least 2 by 2 pixels.")
+    row_window = _window_vector(height, window)
+    column_window = _window_vector(width, window)
+    window_2d = row_window[:, None] * column_window[None, :]
+    normalization = float(np.sum(window_2d**2))
+    if normalization <= 0:
+        raise ValueError("Fourier v2 window has zero power for this rectangle.")
+
+    removed_mean = float(np.mean(region))
+    processed = (region - removed_mean) * window_2d
+    spectrum = np.fft.fftshift(np.fft.fft2(processed))
+    intensity = np.asarray(np.abs(spectrum) ** 2 / normalization, dtype=float)
+    frequency_y = np.asarray(np.fft.fftshift(np.fft.fftfreq(height)), dtype=float)
+    frequency_x = np.asarray(np.fft.fftshift(np.fft.fftfreq(width)), dtype=float)
+    radial = np.hypot(frequency_y[:, None], frequency_x[None, :])
+    eligible = (
+        (radial >= bounds[0])
+        & (radial <= bounds[1])
+        & (radial > 0)
+    )
+    eligible_values = intensity[eligible]
+    if eligible_values.size:
+        eligible_max = float(np.max(eligible_values))
+        eligible_mean = float(np.mean(eligible_values))
+        metric = eligible_max / eligible_mean if eligible_mean > 0 else 0.0
+    else:
+        eligible_max = 0.0
+        eligible_mean = 0.0
+        metric = 0.0
+
+    shape = (height, width)
+    pair_records = []
+    visited = set()
+    for row, column in np.column_stack(np.nonzero(eligible)):
+        first = (int(row), int(column))
+        partner = _conjugate_shifted_index(first, shape)
+        canonical = tuple(sorted((first, partner)))
+        if canonical in visited:
+            continue
+        visited.add(canonical)
+        members = (first,) if first == partner else canonical
+        member_values = [float(intensity[index]) for index in members]
+        total = float(np.sum(member_values))
+        if not np.isfinite(total) or total <= 0:
+            continue
+        pair_records.append((total, canonical[0], canonical, members, member_values))
+    pair_records.sort(key=lambda record: (-record[0], record[1][0], record[1][1]))
+
+    peak_pairs = []
+    for rank, (_, _, canonical, members, member_values) in enumerate(
+        pair_records[:top_pairs], start=1
+    ):
+        first = canonical[0]
+        second = canonical[1] if canonical[1] != canonical[0] else None
+        fy = float(frequency_y[first[0]])
+        fx = float(frequency_x[first[1]])
+        radial_value = float(np.hypot(fy, fx))
+        peak_pairs.append(
+            FourierPeakPair(
+                rank=rank,
+                first_index_rc=first,
+                second_index_rc=second,
+                frequency_y_cycles_per_pixel=fy,
+                frequency_x_cycles_per_pixel=fx,
+                radial_frequency_cycles_per_pixel=radial_value,
+                wavelength_pixels=float(1.0 / radial_value),
+                first_intensity=member_values[0],
+                second_intensity=(member_values[1] if len(member_values) == 2 else None),
+                mean_intensity=float(np.mean(member_values)),
+                total_power=float(np.sum(member_values)),
+                member_count=len(members),
+            )
+        )
+
+    bin_width = (
+        float(radial_bin_width_cycles_per_pixel)
+        if radial_bin_width_cycles_per_pixel is not None
+        else min(1.0 / height, 1.0 / width)
+    )
+    if not np.isfinite(bin_width) or bin_width <= 0:
+        raise ValueError("radial_bin_width_cycles_per_pixel must be positive and finite.")
+    radial_profile = _radial_profile(intensity, radial, bin_width)
+    non_dc_power = float(np.sum(intensity[radial > 0]))
+    low_power = float(np.sum(intensity[(radial > 0) & (radial < bounds[0])]))
+    band_power = float(np.sum(eligible_values))
+    low_fraction = low_power / non_dc_power if non_dc_power > 0 else None
+    band_fraction = band_power / non_dc_power if non_dc_power > 0 else None
+
+    return FourierV2Result(
+        rect=tuple(int(value) for value in rect),
+        schema_version="blender-fuse.fourier-v2.v1",
+        window=window,
+        removed_mean=removed_mean,
+        window_power_normalization=normalization,
+        spectrum=np.asarray(spectrum, dtype=np.complex128),
+        intensity=intensity,
+        frequency_y_cycles_per_pixel=frequency_y,
+        frequency_x_cycles_per_pixel=frequency_x,
+        radial_frequency_cycles_per_pixel=np.asarray(radial, dtype=float),
+        eligible_mask=np.asarray(eligible, dtype=bool),
+        eligible_max_intensity=eligible_max,
+        eligible_mean_intensity=eligible_mean,
+        metric=float(metric),
+        peak_pairs=tuple(peak_pairs),
+        radial_profile=radial_profile,
+        low_frequency_power_fraction=low_fraction,
+        eligible_power_fraction=band_fraction,
     )
 
 
