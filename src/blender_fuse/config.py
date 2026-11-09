@@ -258,6 +258,7 @@ class AnalysisConfig:
     smooth_neighbors: int = 6
     smooth_include_self: bool = False
     periodic_y: bool = True
+    exclude_voronoi_boundary: bool = True
     vertical_shift: int = 0
     background_values: Tuple[float, ...] = (0.0, 2.0)
     fourier_rect: Optional[FourierRectangle] = (700, 900, 800, 1000)
@@ -315,6 +316,7 @@ class AnalysisConfig:
         _require_int("smooth_neighbors", self.smooth_neighbors)
         _require_bool("smooth_include_self", self.smooth_include_self)
         _require_bool("periodic_y", self.periodic_y)
+        _require_bool("exclude_voronoi_boundary", self.exclude_voronoi_boundary)
         if not isinstance(self.vertical_shift, Integral) or isinstance(self.vertical_shift, bool):
             raise TypeError("vertical_shift must be an integer.")
         _require_int("top_frequency_bins", self.top_frequency_bins, minimum=1)

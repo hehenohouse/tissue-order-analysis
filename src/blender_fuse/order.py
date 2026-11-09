@@ -8,6 +8,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import QhullError, Voronoi, cKDTree
 from skimage import measure
 
@@ -17,21 +19,83 @@ from .models import SegmentationQC
 LOGGER = logging.getLogger(__name__)
 
 
+def _merge_wrapped_labels(
+    labels: NDArray[np.integer], count: int
+) -> Tuple[NDArray[np.integer], int, NDArray[np.bool_]]:
+    """Join components that touch across the top/bottom edge (8-connectivity).
+
+    Returns relabeled components, their count, and a per-label flag (index 0 is
+    background) marking components that wrap the vertical boundary. Merged
+    components take the position of their smallest original label, so label
+    order is unchanged when nothing wraps.
+    """
+
+    top, bottom = labels[0], labels[-1]
+    pairs = []
+    for offset in (-1, 0, 1):
+        if offset < 0:
+            first, second = top[-offset:], bottom[:offset]
+        elif offset > 0:
+            first, second = top[:-offset], bottom[offset:]
+        else:
+            first, second = top, bottom
+        touching = (first > 0) & (second > 0)
+        if np.any(touching):
+            pairs.append(np.column_stack((first[touching], second[touching])))
+    wrapped = np.zeros(count + 1, dtype=bool)
+    if not pairs:
+        return labels, count, wrapped
+
+    edges = np.unique(np.vstack(pairs), axis=0) - 1
+    graph = coo_matrix(
+        (np.ones(len(edges), dtype=np.int8), (edges[:, 0], edges[:, 1])),
+        shape=(count, count),
+    )
+    merged_count, membership = connected_components(graph, directed=False)
+    lookup = np.zeros(count + 1, dtype=np.int32)
+    lookup[1:] = membership + 1
+    wrapped = np.zeros(merged_count + 1, dtype=bool)
+    wrapped[lookup[edges[:, 0] + 1]] = True
+    return lookup[labels], int(merged_count), wrapped
+
+
 def label_segmentation(
     segmentation: NDArray[np.bool_],
+    *,
+    periodic_y: bool = False,
 ) -> Tuple[NDArray[np.integer], NDArray[np.floating]]:
-    """Label foreground components and return centroids as ``(row, column)``."""
+    """Label foreground components and return centroids as ``(row, column)``.
+
+    With ``periodic_y`` the top and bottom rows are treated as adjacent, so a
+    region crossing that boundary is one component. Its centroid is computed on
+    the unwrapped rows and reported modulo the image height.
+    """
 
     if segmentation.ndim != 2:
         raise ValueError(f"segmentation must be 2-D; got shape {segmentation.shape}.")
     # Match skimage's historical 2-D default used by the original analysis: 8-connectivity.
-    labels = measure.label(segmentation, connectivity=segmentation.ndim)
-    regions = measure.regionprops(labels)
-    if regions:
-        centroids = np.asarray([region.centroid for region in regions], dtype=float)
-    else:
-        centroids = np.empty((0, 2), dtype=float)
-    return np.asarray(labels, dtype=np.int32), centroids
+    labels = np.asarray(measure.label(segmentation, connectivity=segmentation.ndim), np.int32)
+    count = int(labels.max(initial=0))
+    height = segmentation.shape[0]
+    wrapped = np.zeros(count + 1, dtype=bool)
+    if periodic_y and count and height > 1:
+        labels, count, wrapped = _merge_wrapped_labels(labels, count)
+    if count == 0:
+        return labels, np.empty((0, 2), dtype=float)
+
+    rows, columns = np.nonzero(labels)
+    owners = labels[rows, columns]
+    rows = rows.astype(float)
+    if np.any(wrapped):
+        unwrap = wrapped[owners] & (rows >= height / 2.0)
+        rows[unwrap] -= height
+    sizes = np.bincount(owners, minlength=count + 1)[1:].astype(float)
+    centroid_rows = np.bincount(owners, weights=rows, minlength=count + 1)[1:] / sizes
+    centroid_columns = (
+        np.bincount(owners, weights=columns.astype(float), minlength=count + 1)[1:] / sizes
+    )
+    centroid_rows = np.mod(centroid_rows, height)
+    return labels, np.column_stack((centroid_rows, centroid_columns))
 
 
 @dataclass
@@ -72,7 +136,7 @@ def filter_labeled_components(
     """
 
     source = np.asarray(segmentation, dtype=bool)
-    raw_labels, raw_centroids = label_segmentation(source)
+    raw_labels, raw_centroids = label_segmentation(source, periodic_y=periodic_y)
     raw_count = int(raw_labels.max(initial=0))
     raw_areas = np.bincount(raw_labels.ravel(), minlength=raw_count + 1)[1:].astype(float)
 
@@ -219,6 +283,58 @@ def compute_periodic_order_parameter(
     return augmented_psi[count : 2 * count]
 
 
+def voronoi_boundary_mask(
+    points_rc: NDArray[np.floating],
+    image_shape: Tuple[int, int],
+    periodic_y: bool = True,
+) -> NDArray[np.bool_]:
+    """Flag regions whose Voronoi cell is not fully determined by observed neighbors.
+
+    A cell is flagged when it is unbounded or any vertex lies outside the image
+    (columns always; rows only without vertical periodicity). Such cells lack
+    neighbors on at least one side, so their ψ is biased: dropping the missing
+    ridges and keeping long hull ridges inflates ``|ψ|``. Removing border
+    components before tessellation does not help because the next layer then
+    becomes the hull, so the flag is applied after tessellation instead.
+    """
+
+    points = np.asarray(points_rc, dtype=float)
+    if points.ndim != 2 or points.shape[1:] != (2,):
+        raise ValueError(f"points_rc must have shape (N, 2); got {points.shape}.")
+    height, width = int(image_shape[0]), int(image_shape[1])
+    if height <= 0 or width <= 0:
+        raise ValueError("image_shape must be positive.")
+    count = len(points)
+    if count < 4:
+        return np.ones(count, dtype=bool)
+
+    if periodic_y:
+        search = np.vstack(
+            (points - [float(height), 0.0], points, points + [float(height), 0.0])
+        )
+        offset = count
+    else:
+        search = points
+        offset = 0
+    try:
+        voronoi = Voronoi(search, qhull_options="QJ")
+    except QhullError as exc:
+        LOGGER.warning("Voronoi tessellation failed (%s); flagging all regions.", exc)
+        return np.ones(count, dtype=bool)
+
+    vertices = voronoi.vertices
+    outside_vertex = (vertices[:, 1] < -0.5) | (vertices[:, 1] > width - 0.5)
+    if not periodic_y:
+        outside_vertex |= (vertices[:, 0] < -0.5) | (vertices[:, 0] > height - 0.5)
+
+    flagged = np.zeros(count, dtype=bool)
+    for index in range(count):
+        region = voronoi.regions[voronoi.point_region[offset + index]]
+        if not region or -1 in region or np.any(outside_vertex[region]):
+            flagged[index] = True
+    return flagged
+
+
 def values_to_label_map(
     labels: NDArray[np.integer], values: NDArray[np.generic]
 ) -> NDArray[np.floating]:
@@ -264,6 +380,21 @@ def smooth_order_magnitudes(
         raise ValueError("points_rc and psi must describe the same number of regions.")
     if n_neighbors < 0:
         raise ValueError("n_neighbors cannot be negative.")
+    finite = np.isfinite(magnitudes)
+    if not np.all(finite):
+        # Excluded regions (NaN ψ) neither receive a smoothed value nor
+        # contribute to their neighbors' averages.
+        smoothed_all = np.full(len(magnitudes), np.nan, dtype=float)
+        if np.any(finite):
+            smoothed_all[finite] = smooth_order_magnitudes(
+                points[finite],
+                np.asarray(psi)[finite],
+                n_neighbors,
+                image_height=image_height,
+                periodic_y=periodic_y,
+                include_self=include_self,
+            )
+        return smoothed_all
     if len(points) <= 1 or n_neighbors == 0:
         return np.asarray(magnitudes, dtype=float)
 
@@ -330,7 +461,7 @@ def analyze_order(
 ]:
     """Analyze one foreground mask and return labels, centroids, ψ, and maps."""
 
-    labels, centroids = label_segmentation(segmentation)
+    labels, centroids = label_segmentation(segmentation, periodic_y=periodic_y)
     psi = compute_periodic_order_parameter(
         centroids,
         n_fold,

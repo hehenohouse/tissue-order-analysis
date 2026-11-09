@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import logging
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -36,6 +37,7 @@ from .order import (
     shift_points_for_display,
     smooth_order_magnitudes,
     values_to_label_map,
+    voronoi_boundary_mask,
 )
 from .piv import (
     PIVData,
@@ -95,6 +97,13 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
         image_height=segmentation.shape[0],
         periodic_y=config.periodic_y,
     )
+    quality = components.quality
+    if config.exclude_voronoi_boundary:
+        boundary = voronoi_boundary_mask(
+            centroids, segmentation.shape, periodic_y=config.periodic_y
+        )
+        psi = np.where(boundary, complex(np.nan, np.nan), psi)
+        quality = replace(quality, voronoi_boundary_count=int(np.count_nonzero(boundary)))
     magnitudes = np.asarray(np.abs(psi), dtype=float)
     psi_map = values_to_label_map(labels, magnitudes)
 
@@ -147,12 +156,15 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
     display_centroids = shift_points_for_display(
         centroids, segmentation.shape[0], config.vertical_shift
     )
+    # Hypothesis tests use analysis coordinates so that ``vertical_shift`` (a
+    # display/ROI convenience) cannot change their results.
     statistics = spatial_statistics(
         timepoint,
-        display_centroids,
+        centroids,
         values_for_statistics,
         segmentation.shape[0],
         config.histogram_bin_size,
+        periodic_y=config.periodic_y,
     )
     harmonic_raw = harmonic_association(
         timepoint,
@@ -179,7 +191,7 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
     if config.spatial_bootstrap.enabled:
         bootstrap = spatial_block_bootstrap(
             timepoint,
-            display_centroids,
+            centroids,
             psi,
             areas,
             n_fold=config.n_fold,
@@ -206,7 +218,7 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
         statistics=statistics,
         analysis_segmentation=analysis_segmentation,
         component_areas=areas,
-        segmentation_qc=components.quality,
+        segmentation_qc=quality,
         fourier_v2=fourier_v2,
         harmonic_raw=harmonic_raw,
         harmonic_smoothed=harmonic_smoothed,

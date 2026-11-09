@@ -95,6 +95,7 @@ Useful options include:
 --no-images                   Do not write any frame PNGs, including v2 PNGs
 --no-arrays                   Do not write legacy or v2 per-frame NPZ files
 --no-periodic-y               Disable vertical periodic boundaries
+--keep-voronoi-boundary       Keep ψ for open/out-of-image Voronoi cells (legacy)
 --shift PIXELS                Roll analysis/display coordinates vertically
 --strict-missing              Fail when any requested timepoint is absent
 --piv-mat FILE.mat            Enable PIVlab ROI evolution
@@ -209,7 +210,7 @@ config = AnalysisConfig(
 )
 ```
 
-Area bounds are inclusive: areas equal to the minimum or maximum are retained. Left and right always count as borders. Top and bottom count as borders only when `periodic_y=False`; version 0.2 does not merge components across the periodic seam. With every filter disabled, original labels and legacy numerical inputs are preserved without relabeling.
+Area bounds are inclusive: areas equal to the minimum or maximum are retained. Left and right always count as borders. Top and bottom count as borders only when `periodic_y=False`; with `periodic_y=True`, components that touch across the top/bottom seam (8-connectivity) are merged into one region whose centroid is computed on unwrapped rows and reported modulo the image height. With every filter disabled, original labels and legacy numerical inputs are preserved without relabeling.
 
 `segmentation_qc.csv` reports raw and retained foreground/component counts, overlapping rejection-reason counts, area summaries, thresholds, and source paths.
 
@@ -225,6 +226,8 @@ wᵢⱼ = (Voronoi ridge length)²
 `θᵢⱼ` is measured from the positive x/column axis. Complex phase therefore follows image-coordinate orientation; magnitude is invariant to this orientation choice. The squared-ridge weighting is retained from the original research implementation and differs from equal-weight or edge-length-weight definitions.
 
 Vertical periodicity augments centroids at `y-H`, `y`, and `y+H`, then retains values only for the original copy. Statistical samples are not triplicated.
+
+**Voronoi boundary exclusion (default on).** A region whose Voronoi cell is unbounded, or has a vertex outside the image (columns always; rows only when `periodic_y=False`), lacks neighbors on at least one side. Dropping its infinite ridges while keeping long hull ridges biases |ψₙ| upward (on the bundled 17 °C data, ≈0.8 at the edge versus ≈0.52 in the bulk). Such regions keep their place in the tessellation as neighbors of others but receive ψ = NaN, so they are excluded from maps, smoothing, summaries, tests, and bootstrap. `segmentation_qc.csv` reports `voronoi_boundary_count`. Use `exclude_voronoi_boundary=False` / `--keep-voronoi-boundary` for the legacy behavior. Removing border components with `--exclude-border` does not address this bias, because the next layer of regions then forms the hull.
 
 ### Smoothing
 
@@ -275,7 +278,7 @@ Legacy `frame_metrics.csv` and `spatial_statistics.csv` remain unchanged. New fi
 - Fourier v2 concentration, dominant physical frequency/wavelength, and power fractions;
 - segmentation QC.
 
-Legacy Pearson and one-way ANOVA tests retain their narrow meanings. Pearson tests linear association with image row; ANOVA tests equality of configured row-bin means. Their Benjamini–Hochberg corrections remain separate families across timepoints. Legacy spatial tests use smoothed magnitudes when smoothing is enabled.
+Legacy Pearson and one-way ANOVA tests retain their narrow meanings. Pearson tests linear association with image row; ANOVA tests equality of configured row-bin means. Both are computed in analysis coordinates, so `vertical_shift` never changes them. With `periodic_y=True` the row coordinate has no natural origin and a linear correlation with it is undefined (rolling the image can flip its sign), so Pearson is reported as not performed; use the harmonic association below instead. Their Benjamini–Hochberg corrections remain separate families across timepoints. Legacy spatial tests use smoothed magnitudes when smoothing is enabled.
 
 When vertical periodicity is enabled, `spatial_statistics_harmonic.csv` fits:
 
@@ -285,7 +288,7 @@ value = β₀ + βc cos(2πy/H) + βs sin(2πy/H)
 
 It reports coefficients, amplitude, peak row, R², nested-model F/p, and BH q-values. Raw and smoothed harmonic tests are corrected as independent families.
 
-The optional deterministic two-dimensional block bootstrap resamples occupied fixed blocks in shifted display coordinates and reports exploratory confidence intervals. It does not create biological replicates, replace a spatial generative model, or provide corrected hypothesis-test p-values. Version 0.2 does not join bootstrap blocks across the periodic seam.
+The optional deterministic two-dimensional block bootstrap resamples occupied fixed blocks in analysis coordinates (independent of `vertical_shift`) and reports exploratory confidence intervals. It does not create biological replicates, replace a spatial generative model, or provide corrected hypothesis-test p-values. Version 0.2 does not join bootstrap blocks across the periodic seam.
 
 ## Provenance and resume
 

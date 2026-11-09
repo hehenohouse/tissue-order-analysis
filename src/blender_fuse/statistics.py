@@ -27,11 +27,18 @@ def spatial_statistics(
     values: NDArray[np.generic],
     image_height: int,
     bin_size: int,
+    *,
+    periodic_y: bool = False,
 ) -> StatisticalResult:
     """Test linear association with row and equality of row-bin means.
 
     A non-significant result is reported as a failure to reject the relevant null;
     it is not evidence that variables are independent or distributions uniform.
+
+    With ``periodic_y`` the row coordinate is circular and has no natural origin,
+    so a linear correlation with it is undefined (any vertical roll changes r,
+    even its sign). The Pearson test is then skipped; use the first-harmonic
+    association from :func:`harmonic_association`, which is roll-invariant.
     """
 
     points = np.asarray(centroids_rc, dtype=float)
@@ -65,7 +72,10 @@ def spatial_statistics(
 
     correlation: Optional[float] = None
     correlation_p: Optional[float] = None
-    if (
+    skipped_reason: Optional[str] = None
+    if periodic_y:
+        skipped_reason = "periodic row coordinate"
+    elif (
         len(rows) >= 3
         and not np.allclose(rows, rows[0])
         and not np.allclose(magnitudes, magnitudes[0])
@@ -93,6 +103,7 @@ def spatial_statistics(
         bin_centers=bin_centers,
         bin_means=bin_means,
         bin_counts=bin_counts,
+        correlation_skipped_reason=skipped_reason,
     )
 
 
@@ -184,8 +195,12 @@ def harmonic_association(
         return empty
     r_squared = float(np.clip(1.0 - residual_sum / total_sum, 0.0, 1.0))
     numerator = max(0.0, total_sum - residual_sum) / 2.0
-    if residual_sum <= np.finfo(float).eps:
-        f_statistic = float("inf") if numerator > 0 else 0.0
+    f_statistic: Optional[float]
+    p_value: Optional[float]
+    if residual_sum <= np.finfo(float).eps * max(total_sum, 1.0):
+        # A numerically exact fit has an unbounded F. Report it as missing
+        # (an infinite float would not survive JSON checkpoints) with p = 0.
+        f_statistic = None
         p_value = 0.0 if numerator > 0 else 1.0
     else:
         f_statistic = float(numerator / (residual_sum / (len(rows) - 3)))
@@ -271,6 +286,8 @@ def spatial_block_bootstrap(
     areas = np.asarray(component_areas, dtype=float)
     if points.shape != (len(complex_values), 2) or areas.shape != (len(complex_values),):
         raise ValueError("centroids_rc, psi, and component_areas must describe the same regions.")
+    finite = np.isfinite(complex_values.real) & np.isfinite(complex_values.imag)
+    points, complex_values, areas = points[finite], complex_values[finite], areas[finite]
     if not len(points):
         return ()
     if block_size_pixels <= 0 or replicates <= 0:
@@ -367,6 +384,11 @@ def pearson_conclusion(result: StatisticalResult, alpha: float = 0.05) -> str:
         value = result.correlation_p_value
         label = "p-value"
     if value is None:
+        if result.correlation_skipped_reason == "periodic row coordinate":
+            return (
+                "Pearson test not performed (row coordinate is periodic; "
+                "see harmonic association instead)."
+            )
         return "Pearson test not performed (insufficient or constant data)."
     if value <= alpha:
         return f"Evidence of a linear association ({label} ≤ {alpha:g})."

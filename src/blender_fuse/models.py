@@ -114,6 +114,7 @@ class SegmentationQC:
     retained_area_median: Optional[float]
     retained_area_mean: Optional[float]
     retained_area_max: Optional[float]
+    voronoi_boundary_count: int = 0
 
 
 @dataclass
@@ -171,6 +172,7 @@ class StatisticalResult:
     bin_centers: FloatArray = field(default_factory=lambda: np.empty(0, dtype=float))
     bin_means: FloatArray = field(default_factory=lambda: np.empty(0, dtype=float))
     bin_counts: IntArray = field(default_factory=lambda: np.empty(0, dtype=int))
+    correlation_skipped_reason: Optional[str] = None
 
 
 @dataclass
