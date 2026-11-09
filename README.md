@@ -91,10 +91,12 @@ Useful options include:
 --max-area PIXELS             Reject components larger than this inclusive bound
 --exclude-border              Reject components touching configured image borders
 --bootstrap                   Enable exploratory spatial block bootstrap intervals
+--structure                   Compute coordination defects and the g6(r) correlation
 --resume                      Validate checkpoints and reuse completed frames
 --no-images                   Do not write any frame PNGs, including v2 PNGs
 --no-arrays                   Do not write legacy or v2 per-frame NPZ files
 --no-periodic-y               Disable vertical periodic boundaries
+--keep-voronoi-boundary       Keep ψ for open/out-of-image Voronoi cells (legacy)
 --shift PIXELS                Roll analysis/display coordinates vertically
 --strict-missing              Fail when any requested timepoint is absent
 --piv-mat FILE.mat            Enable PIVlab ROI evolution
@@ -209,9 +211,19 @@ config = AnalysisConfig(
 )
 ```
 
-Area bounds are inclusive: areas equal to the minimum or maximum are retained. Left and right always count as borders. Top and bottom count as borders only when `periodic_y=False`; version 0.2 does not merge components across the periodic seam. With every filter disabled, original labels and legacy numerical inputs are preserved without relabeling.
+Area bounds are inclusive: areas equal to the minimum or maximum are retained. Left and right always count as borders. Top and bottom count as borders only when `periodic_y=False`; with `periodic_y=True`, components that touch across the top/bottom seam (8-connectivity) are merged into one region whose centroid is computed on unwrapped rows and reported modulo the image height. With every filter disabled, original labels and legacy numerical inputs are preserved without relabeling.
 
 `segmentation_qc.csv` reports raw and retained foreground/component counts, overlapping rejection-reason counts, area summaries, thresholds, and source paths.
+
+### Detection-loss QC
+
+Each frame's retained centroids are also checked for missed detections. Missing nuclei leave holes, but the survivors keep their true local spacing. So the median nearest-neighbor distance `d` stays flat while the mean spacing `a = √(H·W/N)` grows. `segmentation_qc.csv` reports:
+
+- `median_nn_distance_pixels`, `nn_distance_cv`;
+- `nn_distance_ratio = d / a` (≈ 1.07 for a perfect triangular lattice; falls when regions go missing, unchanged by uniform expansion);
+- `hole_area_fraction`, the share of Delaunay-triangle area whose circumradius exceeds `d` (a missing point raises its triangles' circumradius from `d/√3` to about `d`).
+
+All four use a window three spacings inside the image edges. Positional disorder alone also creates some large triangles (≈ 7 % of the area on well-segmented 17 °C frames), so compare frames within a run rather than reading the values as absolute counts. `images/segmentation_qc.png` plots counts, `d` against `a`, and the hole fraction over time; diverging `d` and `a` curves are the signature of detection loss. Because these metrics are computed on retained regions, single-pixel fragments should be removed first with `--min-area`.
 
 ### Weighted Voronoi ψₙ
 
@@ -225,6 +237,8 @@ wᵢⱼ = (Voronoi ridge length)²
 `θᵢⱼ` is measured from the positive x/column axis. Complex phase therefore follows image-coordinate orientation; magnitude is invariant to this orientation choice. The squared-ridge weighting is retained from the original research implementation and differs from equal-weight or edge-length-weight definitions.
 
 Vertical periodicity augments centroids at `y-H`, `y`, and `y+H`, then retains values only for the original copy. Statistical samples are not triplicated.
+
+**Voronoi boundary exclusion (default on).** A region whose Voronoi cell is unbounded, or has a vertex outside the image (columns always; rows only when `periodic_y=False`), lacks neighbors on at least one side. Dropping its infinite ridges while keeping long hull ridges biases |ψₙ| upward (on the bundled 17 °C data, ≈0.8 at the edge versus ≈0.52 in the bulk). Such regions keep their place in the tessellation as neighbors of others but receive ψ = NaN, so they are excluded from maps, smoothing, summaries, tests, and bootstrap. `segmentation_qc.csv` reports `voronoi_boundary_count`. Use `exclude_voronoi_boundary=False` / `--keep-voronoi-boundary` for the legacy behavior. Removing border components with `--exclude-border` does not address this bias, because the next layer of regions then forms the hull.
 
 ### Smoothing
 
@@ -275,7 +289,7 @@ Legacy `frame_metrics.csv` and `spatial_statistics.csv` remain unchanged. New fi
 - Fourier v2 concentration, dominant physical frequency/wavelength, and power fractions;
 - segmentation QC.
 
-Legacy Pearson and one-way ANOVA tests retain their narrow meanings. Pearson tests linear association with image row; ANOVA tests equality of configured row-bin means. Their Benjamini–Hochberg corrections remain separate families across timepoints. Legacy spatial tests use smoothed magnitudes when smoothing is enabled.
+Legacy Pearson and one-way ANOVA tests retain their narrow meanings. Pearson tests linear association with image row; ANOVA tests equality of configured row-bin means. Both are computed in analysis coordinates, so `vertical_shift` never changes them. With `periodic_y=True` the row coordinate has no natural origin and a linear correlation with it is undefined (rolling the image can flip its sign), so Pearson is reported as not performed; use the harmonic association below instead. Their Benjamini–Hochberg corrections remain separate families across timepoints. Legacy spatial tests use smoothed magnitudes when smoothing is enabled.
 
 When vertical periodicity is enabled, `spatial_statistics_harmonic.csv` fits:
 
@@ -285,7 +299,24 @@ value = β₀ + βc cos(2πy/H) + βs sin(2πy/H)
 
 It reports coefficients, amplitude, peak row, R², nested-model F/p, and BH q-values. Raw and smoothed harmonic tests are corrected as independent families.
 
-The optional deterministic two-dimensional block bootstrap resamples occupied fixed blocks in shifted display coordinates and reports exploratory confidence intervals. It does not create biological replicates, replace a spatial generative model, or provide corrected hypothesis-test p-values. Version 0.2 does not join bootstrap blocks across the periodic seam.
+The optional deterministic two-dimensional block bootstrap resamples occupied fixed blocks in analysis coordinates (independent of `vertical_shift`) and reports exploratory confidence intervals. It does not create biological replicates, replace a spatial generative model, or provide corrected hypothesis-test p-values. Version 0.2 does not join bootstrap blocks across the periodic seam.
+
+### Topological defects and orientational correlation (optional)
+
+Enable with `--structure` or `StructureConfig(enabled=True)`.
+
+**Coordination defects.** Each region's coordination number `z` is its count of Voronoi neighbors (neighbors across the periodic seam map back to the original region). Topological charge is `q = 6 − z`; any `z ≠ 6` is a defect. Statistics use interior regions only: a region is excluded when it is a Voronoi boundary region (see above) *or touches one*, because a region beside a free edge can have a closed cell yet miss the neighbor beyond the edge. `structure_metrics.csv` reports the fractions with `z ≤ 4, 5, 6, 7, ≥ 8`, mean `z` (≈ 6 by Euler's relation, a useful sanity check), mean |q|, net charge, the share of defects touching any defect, and `dislocation_fraction`, the share touching a defect of opposite sign (5–7 pairs are the elementary dislocation).
+
+**g₆(r).** `g₆(r) = ⟨Re ψ₆(rᵢ) ψ₆*(rⱼ)⟩` over all pairs of regions with finite ψ₆ at separation `r`, wrapping vertically when `periodic_y=True`. It is normalized by `⟨|ψ₆|²⟩` and binned in units of the mean spacing `a = √(H·W/N)` (defaults: up to `15a`, bins of `0.25a`, capped at half the width and, when periodic, half the height). `g6_correlation.csv` holds every curve.
+
+Three decay scales are reported, all starting at `r ≥ 0.75a` because closer bins hold few, often spurious pairs:
+
+- `xi_1e_pixels`: where the normalized curve first falls below 1/e, model-free. When the curve is already below 1/e in the first usable bin, `xi_1e_is_upper_bound` is true and the value is only an upper bound (plotted as grey triangles);
+- `exp_xi_pixels` and `power_eta`: exponential (liquid-like) and power-law (hexatic-like) fits from `r = a` until the curve first drops below 0.05, with R² in log space.
+
+When order decays within one or two spacings, only a few bins enter the fits. Treat their R² as descriptive, not as a test that distinguishes phases.
+
+**Caveats.** Single-pixel segmentation fragments add spurious neighbors and defects. On the bundled 17 °C data, about 15 % of components are 1–2 px. Inspect `segmentation_qc.csv` and consider `--min-area` before interpreting defect fractions. Neighboring ψ₆ values share Voronoi ridges, so g₆ is positively biased at one spacing by construction.
 
 ## Provenance and resume
 
@@ -323,6 +354,8 @@ analysis_output/
 │   ├── spatial_statistics.csv
 │   ├── spatial_statistics_harmonic.csv
 │   ├── spatial_block_bootstrap.csv
+│   ├── structure_metrics.csv
+│   ├── g6_correlation.csv
 │   ├── fourier_v2_metrics.csv
 │   └── roi_*.csv
 ├── images/
@@ -333,6 +366,9 @@ analysis_output/
 │   ├── reciprocal/
 │   ├── fourier_v2/
 │   ├── fourier_v2_radial/
+│   ├── structure_summary.png
+│   ├── g6_curves.png
+│   ├── segmentation_qc.png
 │   └── roi*/
 ├── provenance/
 │   ├── input_checksums.sha256

@@ -57,6 +57,9 @@ class OutputOptions:
     save_fourier_v2_arrays: bool = True
     save_fourier_v2_images: bool = True
     save_fourier_v2_tables: bool = True
+    save_structure_tables: bool = True
+    save_structure_images: bool = True
+    save_segmentation_qc_plot: bool = True
 
     def validate(self) -> None:
         for name, value in vars(self).items():
@@ -174,6 +177,26 @@ class SpatialBootstrapConfig:
 
 
 @dataclass
+class StructureConfig:
+    """Optional topological-defect and g₆(r) correlation analysis."""
+
+    enabled: bool = False
+    max_distance_spacings: float = 15.0
+    bin_width_spacings: float = 0.25
+
+    def validate(self) -> None:
+        _require_bool("structure.enabled", self.enabled)
+        _require_finite(
+            "structure.max_distance_spacings", self.max_distance_spacings, positive=True
+        )
+        _require_finite("structure.bin_width_spacings", self.bin_width_spacings, positive=True)
+        if self.bin_width_spacings > self.max_distance_spacings:
+            raise ValueError(
+                "structure.bin_width_spacings cannot exceed structure.max_distance_spacings."
+            )
+
+
+@dataclass
 class ResumeConfig:
     """Validated checkpoint-resume settings."""
 
@@ -258,6 +281,7 @@ class AnalysisConfig:
     smooth_neighbors: int = 6
     smooth_include_self: bool = False
     periodic_y: bool = True
+    exclude_voronoi_boundary: bool = True
     vertical_shift: int = 0
     background_values: Tuple[float, ...] = (0.0, 2.0)
     fourier_rect: Optional[FourierRectangle] = (700, 900, 800, 1000)
@@ -275,6 +299,7 @@ class AnalysisConfig:
     spatial_bootstrap: SpatialBootstrapConfig = field(
         default_factory=SpatialBootstrapConfig
     )
+    structure: StructureConfig = field(default_factory=StructureConfig)
     resume: ResumeConfig = field(default_factory=ResumeConfig)
     provenance: ProvenanceConfig = field(default_factory=ProvenanceConfig)
 
@@ -315,6 +340,7 @@ class AnalysisConfig:
         _require_int("smooth_neighbors", self.smooth_neighbors)
         _require_bool("smooth_include_self", self.smooth_include_self)
         _require_bool("periodic_y", self.periodic_y)
+        _require_bool("exclude_voronoi_boundary", self.exclude_voronoi_boundary)
         if not isinstance(self.vertical_shift, Integral) or isinstance(self.vertical_shift, bool):
             raise TypeError("vertical_shift must be an integer.")
         _require_int("top_frequency_bins", self.top_frequency_bins, minimum=1)
@@ -343,6 +369,7 @@ class AnalysisConfig:
         self.segmentation_filter.validate()
         self.fourier_v2.validate(fourier_rect=self.fourier_rect)
         self.spatial_bootstrap.validate()
+        self.structure.validate()
         self.resume.validate()
         self.provenance.validate()
         if self.resume.enabled and self.piv.enabled:

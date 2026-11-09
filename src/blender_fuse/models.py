@@ -114,6 +114,11 @@ class SegmentationQC:
     retained_area_median: Optional[float]
     retained_area_mean: Optional[float]
     retained_area_max: Optional[float]
+    voronoi_boundary_count: int = 0
+    median_nn_distance_pixels: Optional[float] = None
+    nn_distance_cv: Optional[float] = None
+    nn_distance_ratio: Optional[float] = None
+    hole_area_fraction: Optional[float] = None
 
 
 @dataclass
@@ -158,6 +163,38 @@ class BootstrapResult:
 
 
 @dataclass
+class StructureResult:
+    """Per-frame topological defects and orientational correlation g₆(r)."""
+
+    timepoint: int
+    region_count: int
+    mean_spacing_pixels: Optional[float]
+    mean_psi_squared: Optional[float]
+    interior_regions: int
+    mean_coordination: Optional[float]
+    fraction_z4_or_less: Optional[float]
+    fraction_z5: Optional[float]
+    fraction_z6: Optional[float]
+    fraction_z7: Optional[float]
+    fraction_z8_or_more: Optional[float]
+    defect_fraction: Optional[float]
+    mean_abs_charge: Optional[float]
+    net_charge_per_region: Optional[float]
+    defect_neighbor_fraction: Optional[float]
+    dislocation_fraction: Optional[float]
+    xi_1e_pixels: Optional[float]
+    xi_1e_is_upper_bound: bool
+    exp_xi_pixels: Optional[float]
+    exp_r_squared: Optional[float]
+    power_eta: Optional[float]
+    power_r_squared: Optional[float]
+    g6_r_pixels: Tuple[float, ...] = ()
+    g6: Tuple[Optional[float], ...] = ()
+    g6_normalized: Tuple[Optional[float], ...] = ()
+    g6_pair_counts: Tuple[int, ...] = ()
+
+
+@dataclass
 class StatisticalResult:
     """Per-frame spatial tests with deliberately narrow interpretations."""
 
@@ -171,6 +208,7 @@ class StatisticalResult:
     bin_centers: FloatArray = field(default_factory=lambda: np.empty(0, dtype=float))
     bin_means: FloatArray = field(default_factory=lambda: np.empty(0, dtype=float))
     bin_counts: IntArray = field(default_factory=lambda: np.empty(0, dtype=int))
+    correlation_skipped_reason: Optional[str] = None
 
 
 @dataclass
@@ -209,6 +247,7 @@ class FrameAnalysis:
     complex_psi_cell: Optional[ComplexPsiSummary] = None
     complex_psi_area: Optional[ComplexPsiSummary] = None
     bootstrap_results: Tuple[BootstrapResult, ...] = ()
+    structure: Optional[StructureResult] = None
 
 
 @dataclass
@@ -247,6 +286,7 @@ class AnalysisResult:
     harmonic_statistics: List[HarmonicResult] = field(default_factory=list)
     segmentation_qc: Dict[int, SegmentationQC] = field(default_factory=dict)
     bootstrap_statistics: List[BootstrapResult] = field(default_factory=list)
+    structure_results: List[StructureResult] = field(default_factory=list)
     resumed_timepoints: List[int] = field(default_factory=list)
 
     @property

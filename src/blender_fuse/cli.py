@@ -59,6 +59,19 @@ def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
     periodic = parser.add_mutually_exclusive_group()
     periodic.add_argument("--periodic-y", action="store_true", default=argparse.SUPPRESS)
     periodic.add_argument("--no-periodic-y", action="store_true", default=argparse.SUPPRESS)
+    voronoi_edge = parser.add_mutually_exclusive_group()
+    voronoi_edge.add_argument(
+        "--exclude-voronoi-boundary",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Set ψ to NaN for regions with open or out-of-image Voronoi cells (default).",
+    )
+    voronoi_edge.add_argument(
+        "--keep-voronoi-boundary",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Keep ψ for boundary regions (legacy behavior; biased toward high |ψ|).",
+    )
     missing = parser.add_mutually_exclusive_group()
     missing.add_argument("--strict-missing", action="store_true", default=argparse.SUPPRESS)
     missing.add_argument("--allow-missing", action="store_true", default=argparse.SUPPRESS)
@@ -91,6 +104,27 @@ def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--bootstrap-block-size", type=int, default=argparse.SUPPRESS)
     parser.add_argument("--bootstrap-confidence", type=float, default=argparse.SUPPRESS)
     parser.add_argument("--bootstrap-seed", type=int, default=argparse.SUPPRESS)
+
+    structure = parser.add_mutually_exclusive_group()
+    structure.add_argument(
+        "--structure",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Compute Voronoi coordination defects and the g6(r) correlation.",
+    )
+    structure.add_argument("--no-structure", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument(
+        "--g6-max-spacings",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Largest g6(r) separation in mean spacings (default 15).",
+    )
+    parser.add_argument(
+        "--g6-bin-spacings",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="g6(r) bin width in mean spacings (default 0.25).",
+    )
 
     resume = parser.add_mutually_exclusive_group()
     resume.add_argument("--resume", action="store_true", default=argparse.SUPPRESS)
@@ -188,6 +222,10 @@ def _nested_overrides(args: argparse.Namespace) -> Dict[str, Any]:
         overrides["periodic_y"] = True
     if supplied.get("no_periodic_y"):
         overrides["periodic_y"] = False
+    if supplied.get("exclude_voronoi_boundary"):
+        overrides["exclude_voronoi_boundary"] = True
+    if supplied.get("keep_voronoi_boundary"):
+        overrides["exclude_voronoi_boundary"] = False
     if supplied.get("strict_missing"):
         overrides["strict_missing"] = True
     if supplied.get("allow_missing"):
@@ -237,6 +275,20 @@ def _nested_overrides(args: argparse.Namespace) -> Dict[str, Any]:
     if bootstrap_values:
         overrides["spatial_bootstrap"] = bootstrap_values
 
+    structure_values: Dict[str, Any] = {}
+    if supplied.get("structure"):
+        structure_values["enabled"] = True
+    if supplied.get("no_structure"):
+        structure_values["enabled"] = False
+    for source, destination in (
+        ("g6_max_spacings", "max_distance_spacings"),
+        ("g6_bin_spacings", "bin_width_spacings"),
+    ):
+        if source in supplied:
+            structure_values[destination] = supplied[source]
+    if structure_values:
+        overrides["structure"] = structure_values
+
     if supplied.get("resume"):
         overrides["resume"] = {"enabled": True}
     if supplied.get("no_resume"):
@@ -277,6 +329,8 @@ def _build_config(args: argparse.Namespace) -> AnalysisConfig:
                 "save_fourier_images": False,
                 "save_reciprocal_overlay": False,
                 "save_fourier_v2_images": False,
+                "save_structure_images": False,
+                "save_segmentation_qc_plot": False,
             }
         )
         piv.update({"save_roi_images": False, "save_roi_fourier": False})
@@ -367,6 +421,7 @@ def inspect_analysis(config: AnalysisConfig) -> Dict[str, Any]:
         "dtype_consistent": len({record["dtype"] for record in records}) == 1,
         "settings": {
             "periodic_y": config.periodic_y,
+            "exclude_voronoi_boundary": config.exclude_voronoi_boundary,
             "vertical_shift": config.vertical_shift,
             "fourier_rect": config.fourier_rect,
             "fourier_v2": {
@@ -390,6 +445,7 @@ def inspect_analysis(config: AnalysisConfig) -> Dict[str, Any]:
                 "exclude_border": config.segmentation_filter.exclude_border,
             },
             "spatial_bootstrap_enabled": config.spatial_bootstrap.enabled,
+            "structure_enabled": config.structure.enabled,
             "resume_enabled": config.resume.enabled,
             "piv_enabled": config.piv.enabled,
         },

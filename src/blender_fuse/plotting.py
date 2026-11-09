@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
@@ -15,7 +15,9 @@ from .models import (
     FourierV2Result,
     FrameSummary,
     ROIStatistics,
+    SegmentationQC,
     StatisticalResult,
+    StructureResult,
 )
 
 SURFACE = "#fcfcfb"
@@ -497,6 +499,180 @@ def save_fourier_v2_series(
     axes[1].set_title("Dominant conjugate pair", color=TEXT_PRIMARY, loc="left")
     figure.suptitle("Fourier v2 over time", color=TEXT_PRIMARY, y=0.97)
     figure.subplots_adjust(left=0.12, right=0.96, bottom=0.10, top=0.88, hspace=0.34)
+    return _save(figure, path)
+
+
+def _optional_series(values: Iterable[Optional[float]]) -> np.ndarray:
+    return np.asarray([np.nan if value is None else value for value in values], dtype=float)
+
+
+def save_structure_series(
+    results: Sequence[StructureResult],
+    path: Path,
+    *,
+    start_t: int,
+    frame_interval_minutes: float,
+) -> Path:
+    """Plot coordination-defect fractions and the g6 decay scale over time."""
+
+    import matplotlib.pyplot as plt
+
+    if not results:
+        raise ValueError("Cannot plot structure series without results.")
+    minutes = np.asarray(
+        [(item.timepoint - start_t) * frame_interval_minutes for item in results], dtype=float
+    )
+    figure, axes = plt.subplots(3, 1, figsize=(11.0, 10.0), sharex=True, facecolor=SURFACE)
+    for axis in axes:
+        _prepare_axis(axis)
+
+    axes[0].plot(
+        minutes, _optional_series(r.defect_fraction for r in results),
+        color=TEXT_PRIMARY, linewidth=2.0, label="All defects (z ≠ 6)",
+    )
+    axes[0].plot(
+        minutes, _optional_series(r.fraction_z5 for r in results),
+        color=BLUE, linewidth=1.6, label="z = 5",
+    )
+    axes[0].plot(
+        minutes, _optional_series(r.fraction_z7 for r in results),
+        color=ORANGE, linewidth=1.6, label="z = 7",
+    )
+    axes[0].set_ylabel("Fraction of interior regions", color=TEXT_SECONDARY)
+    axes[0].set_title("Voronoi coordination defects", color=TEXT_PRIMARY, loc="left")
+    axes[0].legend(frameon=False, labelcolor=TEXT_SECONDARY, loc="best")
+
+    axes[1].plot(
+        minutes, _optional_series(r.dislocation_fraction for r in results),
+        color=BLUE, linewidth=1.8, label="Touching opposite-charge defect",
+    )
+    axes[1].plot(
+        minutes, _optional_series(r.defect_neighbor_fraction for r in results),
+        color=MUTED, linewidth=1.4, label="Touching any defect",
+    )
+    axes[1].set_ylabel("Fraction of defects", color=TEXT_SECONDARY)
+    axes[1].set_title("Defect clustering", color=TEXT_PRIMARY, loc="left")
+    axes[1].legend(frameon=False, labelcolor=TEXT_SECONDARY, loc="best")
+
+    spacing = _optional_series(r.mean_spacing_pixels for r in results)
+    xi = _optional_series(r.xi_1e_pixels for r in results) / spacing
+    bound = np.asarray([r.xi_1e_is_upper_bound for r in results], dtype=bool)
+    axes[2].plot(minutes, np.where(bound, np.nan, xi), color=BLUE, linewidth=2.0)
+    if np.any(bound):
+        axes[2].scatter(
+            minutes[bound], xi[bound], marker="v", s=14, color=MUTED,
+            label="Upper bound (decays within first usable bin)",
+        )
+        axes[2].legend(frameon=False, labelcolor=TEXT_SECONDARY, loc="best")
+    axes[2].set_ylabel("ξ₆ (1/e) / mean spacing", color=TEXT_SECONDARY)
+    axes[2].set_title("Orientational correlation length", color=TEXT_PRIMARY, loc="left")
+    axes[2].set_xlabel("Time (min)", color=TEXT_SECONDARY)
+    figure.tight_layout()
+    return _save(figure, path)
+
+
+def save_g6_curves(
+    results: Sequence[StructureResult],
+    path: Path,
+    *,
+    start_t: int,
+    frame_interval_minutes: float,
+    max_curves: int = 8,
+) -> Path:
+    """Plot normalized g6(r) for evenly spaced frames, in units of mean spacing."""
+
+    import matplotlib.pyplot as plt
+
+    usable = [item for item in results if item.g6_r_pixels and item.mean_spacing_pixels]
+    if not usable:
+        raise ValueError("Cannot plot g6 curves without correlation data.")
+    indices = np.unique(np.linspace(0, len(usable) - 1, min(max_curves, len(usable))).astype(int))
+    colormap = sequential_blue_colormap()
+    figure, axes = plt.subplots(1, 2, figsize=(13.0, 5.5), facecolor=SURFACE)
+    for axis in axes:
+        _prepare_axis(axis)
+    for order, index in enumerate(indices):
+        item = usable[index]
+        r = np.asarray(item.g6_r_pixels, dtype=float) / float(item.mean_spacing_pixels)
+        g = _optional_series(item.g6_normalized)
+        color = colormap(0.25 + 0.75 * order / max(len(indices) - 1, 1))
+        minutes = (item.timepoint - start_t) * frame_interval_minutes
+        label = f"{minutes:.1f} min"
+        keep = np.isfinite(g) & (r >= 0.75)
+        axes[0].plot(r[keep], g[keep], color=color, linewidth=1.6, label=label)
+        positive = keep & (g > 0)
+        axes[1].loglog(r[positive], g[positive], color=color, linewidth=1.6, label=label)
+    axes[0].axhline(1.0 / np.e, color=MUTED, linewidth=1.0, linestyle="--")
+    axes[0].axhline(0.0, color=BASELINE, linewidth=1.0)
+    axes[0].set_xlabel("r / mean spacing", color=TEXT_SECONDARY)
+    axes[0].set_ylabel("g₆(r) / ⟨|ψ₆|²⟩", color=TEXT_SECONDARY)
+    axes[0].set_title("Orientational correlation (linear)", color=TEXT_PRIMARY, loc="left")
+    axes[1].set_xlabel("r / mean spacing", color=TEXT_SECONDARY)
+    axes[1].set_title("Log–log (power law is a straight line)", color=TEXT_PRIMARY, loc="left")
+    axes[0].legend(frameon=False, labelcolor=TEXT_SECONDARY, fontsize=8)
+    figure.tight_layout()
+    return _save(figure, path)
+
+
+def save_segmentation_qc_series(
+    quality: Mapping[int, SegmentationQC],
+    path: Path,
+    *,
+    start_t: int,
+    frame_interval_minutes: float,
+) -> Path:
+    """Plot detection counts and the spacing signature of missed detections.
+
+    If nuclei are lost from the segmentation, the nearest-neighbor distance of
+    the survivors stays flat while the mean spacing sqrt(H·W/N) rises.
+    """
+
+    import matplotlib.pyplot as plt
+
+    if not quality:
+        raise ValueError("Cannot plot segmentation QC without records.")
+    timepoints = sorted(quality)
+    records = [quality[t] for t in timepoints]
+    minutes = np.asarray([(t - start_t) * frame_interval_minutes for t in timepoints], float)
+    raw = np.asarray([r.raw_component_count for r in records], dtype=float)
+    kept = np.asarray([r.retained_component_count for r in records], dtype=float)
+    spacing = np.sqrt(
+        np.asarray([r.image_height * r.image_width for r in records], dtype=float)
+        / np.maximum(kept, 1.0)
+    )
+    nearest = _optional_series(r.median_nn_distance_pixels for r in records)
+    holes = _optional_series(r.hole_area_fraction for r in records)
+
+    figure, axes = plt.subplots(3, 1, figsize=(11.0, 10.0), sharex=True, facecolor=SURFACE)
+    for axis in axes:
+        _prepare_axis(axis)
+    axes[0].plot(minutes, raw, color=MUTED, linewidth=1.6, label="All components")
+    axes[0].plot(minutes, kept, color=TEXT_PRIMARY, linewidth=2.0, label="Retained")
+    axes[0].set_ylabel("Count", color=TEXT_SECONDARY)
+    axes[0].set_title("Detected regions", color=TEXT_PRIMARY, loc="left")
+    axes[0].legend(frameon=False, labelcolor=TEXT_SECONDARY, loc="best")
+
+    axes[1].plot(minutes, spacing, color=ORANGE, linewidth=2.0, label="Mean spacing √(HW/N)")
+    axes[1].plot(
+        minutes, nearest, color=BLUE, linewidth=2.0, label="Median nearest-neighbor distance"
+    )
+    axes[1].set_ylabel("Pixels", color=TEXT_SECONDARY)
+    axes[1].set_title(
+        "Diverging lines = regions missing while local spacing is unchanged",
+        color=TEXT_PRIMARY,
+        loc="left",
+    )
+    axes[1].legend(frameon=False, labelcolor=TEXT_SECONDARY, loc="best")
+
+    axes[2].plot(minutes, holes, color=CRITICAL, linewidth=2.0)
+    axes[2].set_ylabel("Area fraction", color=TEXT_SECONDARY)
+    axes[2].set_title(
+        "Delaunay area in holes (circumradius > nearest-neighbor distance)",
+        color=TEXT_PRIMARY,
+        loc="left",
+    )
+    axes[2].set_xlabel("Time (min)", color=TEXT_SECONDARY)
+    figure.tight_layout()
     return _save(figure, path)
 
 
