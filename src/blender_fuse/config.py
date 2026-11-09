@@ -57,6 +57,9 @@ class OutputOptions:
     save_fourier_v2_arrays: bool = True
     save_fourier_v2_images: bool = True
     save_fourier_v2_tables: bool = True
+    save_structure_tables: bool = True
+    save_structure_images: bool = True
+    save_segmentation_qc_plot: bool = True
 
     def validate(self) -> None:
         for name, value in vars(self).items():
@@ -174,6 +177,26 @@ class SpatialBootstrapConfig:
 
 
 @dataclass
+class StructureConfig:
+    """Optional topological-defect and g₆(r) correlation analysis."""
+
+    enabled: bool = False
+    max_distance_spacings: float = 15.0
+    bin_width_spacings: float = 0.25
+
+    def validate(self) -> None:
+        _require_bool("structure.enabled", self.enabled)
+        _require_finite(
+            "structure.max_distance_spacings", self.max_distance_spacings, positive=True
+        )
+        _require_finite("structure.bin_width_spacings", self.bin_width_spacings, positive=True)
+        if self.bin_width_spacings > self.max_distance_spacings:
+            raise ValueError(
+                "structure.bin_width_spacings cannot exceed structure.max_distance_spacings."
+            )
+
+
+@dataclass
 class ResumeConfig:
     """Validated checkpoint-resume settings."""
 
@@ -276,6 +299,7 @@ class AnalysisConfig:
     spatial_bootstrap: SpatialBootstrapConfig = field(
         default_factory=SpatialBootstrapConfig
     )
+    structure: StructureConfig = field(default_factory=StructureConfig)
     resume: ResumeConfig = field(default_factory=ResumeConfig)
     provenance: ProvenanceConfig = field(default_factory=ProvenanceConfig)
 
@@ -345,6 +369,7 @@ class AnalysisConfig:
         self.segmentation_filter.validate()
         self.fourier_v2.validate(fourier_rect=self.fourier_rect)
         self.spatial_bootstrap.validate()
+        self.structure.validate()
         self.resume.validate()
         self.provenance.validate()
         if self.resume.enabled and self.piv.enabled:

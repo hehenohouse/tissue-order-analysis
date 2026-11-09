@@ -17,6 +17,7 @@ from .config import (
     ResumeConfig,
     SegmentationFilterConfig,
     SpatialBootstrapConfig,
+    StructureConfig,
 )
 
 PROFILE_SCHEMA_VERSION = "blender-fuse.analysis-profile.v1"
@@ -26,6 +27,7 @@ _NESTED_TYPES = {
     "segmentation_filter": SegmentationFilterConfig,
     "fourier_v2": FourierV2Config,
     "spatial_bootstrap": SpatialBootstrapConfig,
+    "structure": StructureConfig,
     "resume": ResumeConfig,
     "provenance": ProvenanceConfig,
 }

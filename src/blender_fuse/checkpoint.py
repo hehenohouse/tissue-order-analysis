@@ -16,6 +16,7 @@ from .models import (
     HarmonicResult,
     SegmentationQC,
     StatisticalResult,
+    StructureResult,
 )
 from .provenance import CHECKPOINT_SCHEMA_VERSION, atomic_write_json, sha256_file
 
@@ -131,6 +132,7 @@ class CheckpointManager:
         quality: Optional[SegmentationQC],
         bootstrap: Sequence[BootstrapResult],
         artifacts: Sequence[Path],
+        structure: Optional[StructureResult] = None,
     ) -> Path:
         record = {
             "schema_version": CHECKPOINT_SCHEMA_VERSION,
@@ -141,6 +143,7 @@ class CheckpointManager:
             "harmonic": [asdict(item) for item in harmonic],
             "segmentation_qc": asdict(quality) if quality is not None else None,
             "bootstrap": [asdict(item) for item in bootstrap],
+            "structure": asdict(structure) if structure is not None else None,
             "artifacts": _artifact_records(artifacts, self.output_dir),
         }
         return atomic_write_json(self.frame_path(summary.timepoint), record)
@@ -183,3 +186,15 @@ def restore_checkpoint(
     bootstrap = tuple(BootstrapResult(**item) for item in record.get("bootstrap", []))
     artifacts = tuple(item["path"] for item in record.get("artifacts", []))
     return summary, statistics, harmonic, quality, bootstrap, artifacts
+
+
+def restore_structure(record: Dict[str, Any]) -> Optional[StructureResult]:
+    """Rehydrate the optional structure result from a frame checkpoint."""
+
+    values = record.get("structure")
+    if values is None:
+        return None
+    values = dict(values)
+    for name in ("g6_r_pixels", "g6", "g6_normalized", "g6_pair_counts"):
+        values[name] = tuple(values.get(name, ()))
+    return StructureResult(**values)

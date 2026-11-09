@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .checkpoint import CheckpointManager, restore_checkpoint
+from .checkpoint import CheckpointManager, restore_checkpoint, restore_structure
 from .config import AnalysisConfig
 from .fourier import (
     analyze_centroid_polygon_fourier,
@@ -29,6 +29,7 @@ from .models import (
     FrameSummary,
     HarmonicResult,
     SegmentationQC,
+    StructureResult,
 )
 from .order import (
     compute_periodic_order_parameter,
@@ -52,11 +53,14 @@ from .plotting import (
     save_fourier_v2_map,
     save_fourier_v2_radial,
     save_fourier_v2_series,
+    save_g6_curves,
     save_histogram,
     save_reciprocal_overlay,
     save_roi_series,
     save_scalar_map,
+    save_segmentation_qc_series,
     save_statistical_summary,
+    save_structure_series,
 )
 from .provenance import prepare_run_provenance
 from .statistics import (
@@ -69,6 +73,7 @@ from .statistics import (
     summarize_complex_psi,
     write_statistics_csv,
 )
+from .structure import analyze_structure, spacing_qc
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +102,9 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
         image_height=segmentation.shape[0],
         periodic_y=config.periodic_y,
     )
-    quality = components.quality
+    quality = replace(
+        components.quality, **spacing_qc(centroids, segmentation.shape)
+    )
     if config.exclude_voronoi_boundary:
         boundary = voronoi_boundary_mask(
             centroids, segmentation.shape, periodic_y=config.periodic_y
@@ -203,6 +210,18 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
             periodic_y=config.periodic_y,
         )
 
+    structure = None
+    if config.structure.enabled:
+        structure = analyze_structure(
+            timepoint,
+            centroids,
+            psi,
+            segmentation.shape,
+            periodic_y=config.periodic_y,
+            max_distance_spacings=config.structure.max_distance_spacings,
+            bin_width_spacings=config.structure.bin_width_spacings,
+        )
+
     return FrameAnalysis(
         timepoint=int(timepoint),
         source_path=Path(path),
@@ -225,6 +244,7 @@ def analyze_frame(path: Path, timepoint: int, config: AnalysisConfig) -> FrameAn
         complex_psi_cell=complex_cell,
         complex_psi_area=complex_area,
         bootstrap_results=bootstrap,
+        structure=structure,
     )
 
 
@@ -259,6 +279,9 @@ def _append_restored_frame(
     if quality is not None:
         result.segmentation_qc[summary.timepoint] = quality
     result.bootstrap_statistics.extend(bootstrap)
+    structure = restore_structure(checkpoint)
+    if structure is not None:
+        result.structure_results.append(structure)
     result.resumed_timepoints.append(summary.timepoint)
     for relative in artifacts:
         path = output_dir / relative
@@ -388,6 +411,8 @@ def run_analysis(config: AnalysisConfig) -> AnalysisResult:
             if frame.segmentation_qc is not None:
                 result.segmentation_qc[timepoint] = frame.segmentation_qc
             result.bootstrap_statistics.extend(frame.bootstrap_results)
+            if frame.structure is not None:
+                result.structure_results.append(frame.structure)
             summary = _frame_summary(frame)
             result.frames.append(summary)
             if config.outputs.retain_frame_data:
@@ -399,6 +424,7 @@ def run_analysis(config: AnalysisConfig) -> AnalysisResult:
                 quality=frame.segmentation_qc,
                 bootstrap=frame.bootstrap_results,
                 artifacts=tuple(written.values()),
+                structure=frame.structure,
             )
             result.written_paths.append(checkpoint_path)
 
@@ -423,6 +449,7 @@ def run_analysis(config: AnalysisConfig) -> AnalysisResult:
         result.frames.sort(key=lambda item: item.timepoint)
         result.statistics.sort(key=lambda item: item.timepoint)
         result.harmonic_statistics.sort(key=lambda item: (item.basis, item.timepoint))
+        result.structure_results.sort(key=lambda item: item.timepoint)
         adjust_timepoint_statistics(result.statistics)
         adjust_harmonic_statistics(result.harmonic_statistics)
         result.written_paths.extend(
@@ -836,6 +863,15 @@ def _write_run_outputs(
         paths.append(_write_extended_metrics(result, output_dir))
     if config.outputs.save_segmentation_qc:
         paths.append(_write_segmentation_qc(result, config, output_dir))
+    if config.outputs.save_segmentation_qc_plot and result.segmentation_qc:
+        paths.append(
+            save_segmentation_qc_series(
+                result.segmentation_qc,
+                output_dir / "images" / "segmentation_qc.png",
+                start_t=config.start_t,
+                frame_interval_minutes=config.frame_interval_minutes,
+            )
+        )
     if config.outputs.save_harmonic_statistics and result.harmonic_statistics:
         paths.append(_write_harmonic_statistics(result.harmonic_statistics, output_dir))
     if (
@@ -844,6 +880,26 @@ def _write_run_outputs(
         and result.bootstrap_statistics
     ):
         paths.append(_write_bootstrap_statistics(result, output_dir))
+    if config.structure.enabled and result.structure_results:
+        if config.outputs.save_structure_tables:
+            paths.extend(_write_structure_tables(result.structure_results, output_dir))
+        if config.outputs.save_structure_images:
+            paths.append(
+                save_structure_series(
+                    result.structure_results,
+                    output_dir / "images" / "structure_summary.png",
+                    start_t=config.start_t,
+                    frame_interval_minutes=config.frame_interval_minutes,
+                )
+            )
+            paths.append(
+                save_g6_curves(
+                    result.structure_results,
+                    output_dir / "images" / "g6_curves.png",
+                    start_t=config.start_t,
+                    frame_interval_minutes=config.frame_interval_minutes,
+                )
+            )
     if config.fourier_v2.enabled:
         if config.outputs.save_fourier_v2_tables:
             paths.append(_write_fourier_v2_metrics(result, output_dir))
@@ -1058,6 +1114,78 @@ def _write_harmonic_statistics(results: Sequence[HarmonicResult], output_dir: Pa
                 ]
             )
     return path
+
+
+_STRUCTURE_COLUMNS = (
+    "region_count",
+    "interior_regions",
+    "mean_spacing_pixels",
+    "mean_psi_squared",
+    "mean_coordination",
+    "fraction_z4_or_less",
+    "fraction_z5",
+    "fraction_z6",
+    "fraction_z7",
+    "fraction_z8_or_more",
+    "defect_fraction",
+    "mean_abs_charge",
+    "net_charge_per_region",
+    "defect_neighbor_fraction",
+    "dislocation_fraction",
+    "xi_1e_pixels",
+    "xi_1e_is_upper_bound",
+    "exp_xi_pixels",
+    "exp_r_squared",
+    "power_eta",
+    "power_r_squared",
+)
+
+
+def _write_structure_tables(
+    results: Sequence[StructureResult], output_dir: Path
+) -> List[Path]:
+    data_dir = output_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    metrics = data_dir / "structure_metrics.csv"
+    with metrics.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["timepoint", *_STRUCTURE_COLUMNS, "xi_1e_spacings"])
+        for item in results:
+            spacing = item.mean_spacing_pixels
+            xi_spacings = (
+                item.xi_1e_pixels / spacing
+                if item.xi_1e_pixels is not None and spacing
+                else None
+            )
+            writer.writerow(
+                [
+                    item.timepoint,
+                    *(_csv_value(getattr(item, name)) for name in _STRUCTURE_COLUMNS),
+                    _csv_value(xi_spacings),
+                ]
+            )
+    curves = data_dir / "g6_correlation.csv"
+    with curves.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            ["timepoint", "r_pixels", "r_spacings", "pair_count", "g6", "g6_normalized"]
+        )
+        for item in results:
+            spacing = item.mean_spacing_pixels
+            for r, count, raw, normalized in zip(
+                item.g6_r_pixels, item.g6_pair_counts, item.g6, item.g6_normalized
+            ):
+                writer.writerow(
+                    [
+                        item.timepoint,
+                        r,
+                        _csv_value(r / spacing if spacing else None),
+                        count,
+                        _csv_value(raw),
+                        _csv_value(normalized),
+                    ]
+                )
+    return [metrics, curves]
 
 
 def _write_bootstrap_statistics(result: AnalysisResult, output_dir: Path) -> Path:
