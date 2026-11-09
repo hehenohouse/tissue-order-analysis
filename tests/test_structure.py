@@ -8,12 +8,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from blender_fuse import AnalysisConfig, run_analysis
-from blender_fuse.checkpoint import restore_structure
-from blender_fuse.config import OutputOptions, StructureConfig
-from blender_fuse.order import compute_periodic_order_parameter
-from blender_fuse.profiles import analysis_config_from_dict
-from blender_fuse.structure import (
+from tissue_order_analysis import AnalysisConfig, run_analysis
+from tissue_order_analysis.checkpoint import restore_structure
+from tissue_order_analysis.config import OutputOptions, StructureConfig
+from tissue_order_analysis.order import compute_periodic_order_parameter
+from tissue_order_analysis.profiles import analysis_config_from_dict
+from tissue_order_analysis.structure import (
     analyze_structure,
     correlation_lengths,
     defect_summary,
@@ -210,7 +210,7 @@ def test_correlation_length_is_flagged_as_upper_bound_when_decay_is_immediate() 
 
 
 def test_spacing_qc_detects_missing_points_but_not_uniform_expansion() -> None:
-    from blender_fuse.structure import spacing_qc
+    from tissue_order_analysis.structure import spacing_qc
 
     rng = np.random.default_rng(2)
     lattice, height, width = _hex_lattice(rows=60, columns=60, spacing=20.0, noise=1.0)
@@ -232,7 +232,7 @@ def test_spacing_qc_detects_missing_points_but_not_uniform_expansion() -> None:
 
 
 def test_spacing_qc_is_empty_for_tiny_inputs() -> None:
-    from blender_fuse.structure import spacing_qc
+    from tissue_order_analysis.structure import spacing_qc
 
     result = spacing_qc(np.zeros((3, 2)), (10, 10))
     assert result["hole_area_fraction"] is None

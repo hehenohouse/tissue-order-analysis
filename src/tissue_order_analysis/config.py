@@ -1,4 +1,4 @@
-"""Validated configuration for Blender Fuse analyses."""
+"""Validated configuration for Tissue Order Analysis analyses."""
 
 from __future__ import annotations
 
@@ -373,7 +373,7 @@ class AnalysisConfig:
         self.resume.validate()
         self.provenance.validate()
         if self.resume.enabled and self.piv.enabled:
-            raise ValueError("Resume with PIV is not supported in Blender Fuse 0.2.")
+            raise ValueError("Resume with PIV is not supported in this version.")
         effective_video_sources = (
             self.outputs.save_order_images
             or (self.outputs.save_smoothed_images and self.smooth_neighbors > 0)

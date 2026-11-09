@@ -3,14 +3,14 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "blender-fuse"
+name = "tissue-order-analysis"
 dynamic = ["version"]
 description = "Tissue order-parameter, Fourier, and PIV analysis from H5 segmentations"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Blender Fuse contributors" }]
+authors = [{ name = "Tissue Order Analysis contributors" }]
 keywords = ["tissue", "order-parameter", "fourier", "piv", "segmentation", "hdf5"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -46,8 +46,15 @@ dev = [
     "imageio-ffmpeg>=0.4.9",
 ]
 
+[project.urls]
+Homepage = "https://github.com/hehenohouse/tissue-order-analysis"
+Repository = "https://github.com/hehenohouse/tissue-order-analysis"
+Issues = "https://github.com/hehenohouse/tissue-order-analysis/issues"
+
 [project.scripts]
-blender-fuse = "blender_fuse.cli:main"
+tissue-order-analysis = "tissue_order_analysis.cli:main"
+# Deprecated alias kept for scripts written before the rename.
+blender-fuse = "tissue_order_analysis.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -56,17 +63,17 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.dynamic]
-version = { attr = "blender_fuse._version.__version__" }
+version = { attr = "tissue_order_analysis._version.__version__" }
 
 [tool.setuptools.package-data]
-blender_fuse = ["py.typed"]
+tissue_order_analysis = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
 
 [tool.coverage.run]
-source = ["blender_fuse"]
+source = ["tissue_order_analysis"]
 branch = true
 
 [tool.coverage.report]

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from blender_fuse.fourier import analyze_fourier, analyze_fourier_v2
+from tissue_order_analysis.fourier import analyze_fourier, analyze_fourier_v2
 
 
 def sinusoid(height: int, width: int, x_frequency: int, offset: float = 0.0) -> np.ndarray:

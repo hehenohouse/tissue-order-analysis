@@ -1,4 +1,4 @@
-"""Typed numerical results returned by Blender Fuse."""
+"""Typed numerical results returned by Tissue Order Analysis."""
 
 from __future__ import annotations
 

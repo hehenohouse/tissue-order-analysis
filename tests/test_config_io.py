@@ -4,8 +4,8 @@ import h5py
 import numpy as np
 import pytest
 
-from blender_fuse import AnalysisConfig
-from blender_fuse.io import discover_timepoint_files, load_segmentation_h5
+from tissue_order_analysis import AnalysisConfig
+from tissue_order_analysis.io import discover_timepoint_files, load_segmentation_h5
 
 
 def test_config_validates_without_touching_filesystem(tmp_path: Path) -> None:
@@ -82,7 +82,7 @@ def test_background_values_reject_booleans(tmp_path: Path) -> None:
 
 
 def test_resume_rejects_piv_and_video_requires_images(tmp_path: Path) -> None:
-    from blender_fuse import OutputOptions, PIVConfig, ResumeConfig
+    from tissue_order_analysis import OutputOptions, PIVConfig, ResumeConfig
 
     with pytest.raises(ValueError, match="Resume with PIV"):
         AnalysisConfig(
@@ -106,7 +106,7 @@ def test_resume_rejects_piv_and_video_requires_images(tmp_path: Path) -> None:
 
 
 def test_disabled_v2_images_do_not_count_as_video_source(tmp_path: Path) -> None:
-    from blender_fuse import OutputOptions
+    from tissue_order_analysis import OutputOptions
 
     outputs = OutputOptions(
         save_order_images=False,

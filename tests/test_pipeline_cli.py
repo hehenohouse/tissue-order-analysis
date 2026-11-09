@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from blender_fuse import AnalysisConfig, OutputOptions, analyze_frame, run_analysis
-from blender_fuse.cli import build_parser, main
+from tissue_order_analysis import AnalysisConfig, OutputOptions, analyze_frame, run_analysis
+from tissue_order_analysis.cli import build_parser, main
 
 
 def minimal_outputs(**updates) -> OutputOptions:
@@ -173,7 +173,7 @@ def test_fourier_v2_pipeline_writes_separate_versioned_products(
 ) -> None:
     import csv
 
-    from blender_fuse import FourierV2Config
+    from tissue_order_analysis import FourierV2Config
 
     data_dir = tmp_path / "data"
     points = [(row, column) for row in range(2, 16, 4) for column in range(2, 16, 4)]
@@ -203,7 +203,7 @@ def test_fourier_v2_pipeline_writes_separate_versioned_products(
         )
     )
     with np.load(output_dir / "data/fourier_v2/fourier_v2_T0001.npz") as saved:
-        assert saved["schema_version"].item() == "blender-fuse.fourier-v2.v1"
+        assert saved["schema_version"].item() == "tissue-order-analysis.fourier-v2.v1"
         assert saved["eligible_mask"].dtype == np.bool_
         assert saved["radial_counts"].sum() == 20 * 20 - 1
         assert "peak_radial_frequency_cycles_per_pixel" in saved.files
@@ -229,7 +229,7 @@ def test_fourier_v2_pipeline_writes_separate_versioned_products(
 def test_fourier_v2_table_switch_covers_frame_and_aggregate_tables(
     tmp_path: Path, write_segmentation
 ) -> None:
-    from blender_fuse import FourierV2Config
+    from tissue_order_analysis import FourierV2Config
 
     data_dir = tmp_path / "data"
     write_segmentation(

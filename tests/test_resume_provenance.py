@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from blender_fuse import AnalysisConfig, OutputOptions, run_analysis
-from blender_fuse.config import ProvenanceConfig, ResumeConfig
+from tissue_order_analysis import AnalysisConfig, OutputOptions, run_analysis
+from tissue_order_analysis.config import ProvenanceConfig, ResumeConfig
 
 
 def quiet_outputs() -> OutputOptions:
@@ -90,7 +90,7 @@ def test_manifest_failure_state_is_written(
     def fail(*args, **kwargs):
         raise RuntimeError("injected failure")
 
-    monkeypatch.setattr("blender_fuse.pipeline.analyze_frame", fail)
+    monkeypatch.setattr("tissue_order_analysis.pipeline.analyze_frame", fail)
     with pytest.raises(RuntimeError, match="injected"):
         run_analysis(config)
     manifest = config.resolved_output_dir / "run_manifest.json"
@@ -202,7 +202,7 @@ def test_manifest_ledgers_include_source_version_and_run_checkpoint(
     manifest = json.loads(
         (config.resolved_output_dir / "run_manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["software"]["dependencies"]["blender-fuse"] == "0.2.0"
+    assert manifest["software"]["dependencies"]["tissue-order-analysis"] == "0.2.0"
     assert "checkpoints/run.json" in {
         record["path"] for record in manifest["outputs"]
     }
@@ -213,7 +213,7 @@ def test_manifest_ledgers_include_source_version_and_run_checkpoint(
 def test_completed_v2_resume_rebuilds_aggregate_files_without_frame_recomputation(
     tmp_path: Path, write_segmentation, monkeypatch
 ) -> None:
-    from blender_fuse import FourierV2Config
+    from tissue_order_analysis import FourierV2Config
 
     data = tmp_path / "data"
     points = [(row, column) for row in range(2, 16, 4) for column in range(2, 16, 4)]
@@ -252,7 +252,7 @@ def test_completed_v2_resume_rebuilds_aggregate_files_without_frame_recomputatio
     def unexpected(*args, **kwargs):
         raise AssertionError("completed frames must not be recomputed")
 
-    monkeypatch.setattr("blender_fuse.pipeline.analyze_frame", unexpected)
+    monkeypatch.setattr("tissue_order_analysis.pipeline.analyze_frame", unexpected)
     resumed = run_analysis(replace(config, resume=ResumeConfig(enabled=True)))
     assert resumed.resumed_timepoints == [1, 2]
     assert {path: path.read_bytes() for path in aggregate_paths} == expected

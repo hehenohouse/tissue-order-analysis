@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Legacy editable launcher for Blender Fuse.
+"""Legacy editable launcher for Tissue Order Analysis.
 
-New code should import :mod:`blender_fuse` or use the ``blender-fuse`` command.
+New code should import :mod:`tissue_order_analysis` or use the ``tissue-order-analysis`` command.
 This file remains so the historical ``python code_2.py`` workflow still works.
 """
 
@@ -17,7 +17,12 @@ _SRC_DIR = _PROJECT_DIR / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from blender_fuse import AnalysisConfig, OutputOptions, PIVConfig, run_analysis  # noqa: E402
+from tissue_order_analysis import (  # noqa: E402
+    AnalysisConfig,
+    OutputOptions,
+    PIVConfig,
+    run_analysis,
+)
 
 # ---------------------------------------------------------------------------
 # Editable legacy defaults
@@ -97,14 +102,16 @@ def build_config() -> AnalysisConfig:
 
 
 def run_pipeline(config: AnalysisConfig | None = None):
-    """Compatibility function delegating to :func:`blender_fuse.run_analysis`."""
+    """Compatibility function delegating to :func:`tissue_order_analysis.run_analysis`."""
 
     return run_analysis(config or build_config())
 
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    logging.warning("code_2.py is a compatibility launcher; prefer the blender_fuse API or CLI.")
+    logging.warning(
+        "code_2.py is a compatibility launcher; prefer the tissue_order_analysis API or CLI."
+    )
     try:
         result = run_pipeline()
     except (FileNotFoundError, KeyError, RuntimeError, TypeError, ValueError) as exc:

@@ -1,6 +1,6 @@
-"""Minimal programmatic Blender Fuse example."""
+"""Minimal programmatic Tissue Order Analysis example."""
 
-from blender_fuse import AnalysisConfig, OutputOptions, run_analysis
+from tissue_order_analysis import AnalysisConfig, OutputOptions, run_analysis
 
 config = AnalysisConfig(
     data_dir="raw_data/23C",

@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from blender_fuse.config import SegmentationFilterConfig
-from blender_fuse.order import filter_labeled_components
-from blender_fuse.statistics import (
+from tissue_order_analysis.config import SegmentationFilterConfig
+from tissue_order_analysis.order import filter_labeled_components
+from tissue_order_analysis.statistics import (
     harmonic_association,
     spatial_block_bootstrap,
     summarize_complex_psi,

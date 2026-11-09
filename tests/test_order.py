@@ -1,6 +1,6 @@
 import numpy as np
 
-from blender_fuse.order import (
+from tissue_order_analysis.order import (
     compute_order_parameter,
     compute_periodic_order_parameter,
     label_segmentation,

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
-from blender_fuse.models import StatisticalResult
-from blender_fuse.statistics import (
+from tissue_order_analysis.models import StatisticalResult
+from tissue_order_analysis.statistics import (
     adjust_timepoint_statistics,
     anova_conclusion,
     benjamini_hochberg,
