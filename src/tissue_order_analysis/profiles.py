@@ -1,4 +1,4 @@
-"""Strict JSON profiles for reproducible Blender Fuse analyses."""
+"""Strict JSON profiles for reproducible Tissue Order Analysis analyses."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ from .config import (
     StructureConfig,
 )
 
-PROFILE_SCHEMA_VERSION = "blender-fuse.analysis-profile.v1"
+PROFILE_SCHEMA_VERSION = "tissue-order-analysis.analysis-profile.v1"
+# Profiles written before the package was renamed from "blender-fuse".
+_LEGACY_PROFILE_SCHEMA_VERSIONS = frozenset({"blender-fuse.analysis-profile.v1"})
 _NESTED_TYPES = {
     "outputs": OutputOptions,
     "piv": PIVConfig,
@@ -116,7 +118,10 @@ def load_analysis_profile(path: Path) -> AnalysisConfig:
     unknown = sorted(set(raw) - allowed)
     if unknown:
         raise ValueError(f"Unknown profile field(s): {', '.join(unknown)}")
-    if raw.get("schema_version") != PROFILE_SCHEMA_VERSION:
+    if (
+        raw.get("schema_version") != PROFILE_SCHEMA_VERSION
+        and raw.get("schema_version") not in _LEGACY_PROFILE_SCHEMA_VERSIONS
+    ):
         raise ValueError(
             f"Unsupported profile schema_version {raw.get('schema_version')!r}; "
             f"expected {PROFILE_SCHEMA_VERSION!r}."

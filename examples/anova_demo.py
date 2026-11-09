@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from blender_fuse.statistics import anova_conclusion, spatial_statistics
+from tissue_order_analysis.statistics import anova_conclusion, spatial_statistics
 
 rng = np.random.default_rng(7)
 rows = np.repeat([25.0, 75.0, 125.0], 20)

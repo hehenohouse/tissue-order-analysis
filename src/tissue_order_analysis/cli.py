@@ -1,4 +1,4 @@
-"""Command-line interface for Blender Fuse."""
+"""Command-line interface for Tissue Order Analysis."""
 
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ def _output_arguments(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="blender-fuse",
+        prog="tissue-order-analysis",
         description="Analyze tissue order parameters, Fourier structure, and PIV ROIs.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -406,7 +406,7 @@ def inspect_analysis(config: AnalysisConfig) -> Dict[str, Any]:
             }
         )
     return {
-        "schema_version": "blender-fuse.inspect.v1",
+        "schema_version": "tissue-order-analysis.inspect.v1",
         "data_dir": str(config.data_dir.resolve()),
         "prospective_output_dir": str(config.resolved_output_dir.resolve()),
         "file_count": len(records),

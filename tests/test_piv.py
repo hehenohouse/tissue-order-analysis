@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 from scipy.io import savemat
 
-from blender_fuse import AnalysisConfig, OutputOptions, PIVConfig, run_analysis
-from blender_fuse.piv import (
+from tissue_order_analysis import AnalysisConfig, OutputOptions, PIVConfig, run_analysis
+from tissue_order_analysis.piv import (
     PIVData,
     VelocityInterpolator,
     evolve_polygon,
@@ -95,7 +95,7 @@ def test_pipeline_associates_evolved_roi_with_next_frame(
     for timepoint in (1, 2, 3):
         write_segmentation(data_dir, timepoint, points, shape=(20, 20))
 
-    monkeypatch.setattr("blender_fuse.pipeline.load_pivlab_data", lambda _: constant_piv())
+    monkeypatch.setattr("tissue_order_analysis.pipeline.load_pivlab_data", lambda _: constant_piv())
     outputs = OutputOptions(
         save_order_images=False,
         save_order_arrays=False,

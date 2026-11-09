@@ -19,8 +19,8 @@ from .config import AnalysisConfig
 from .io import inspect_segmentation_h5
 from .profiles import analysis_config_to_dict, canonical_json
 
-MANIFEST_SCHEMA_VERSION = "blender-fuse.run-manifest.v1"
-CHECKPOINT_SCHEMA_VERSION = "blender-fuse.checkpoint.v1"
+MANIFEST_SCHEMA_VERSION = "tissue-order-analysis.run-manifest.v1"
+CHECKPOINT_SCHEMA_VERSION = "tissue-order-analysis.checkpoint.v1"
 
 
 def utc_now() -> str:
@@ -56,7 +56,7 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> Path:
 
 def _dependency_versions() -> Dict[str, Optional[str]]:
     names = (
-        "blender-fuse",
+        "tissue-order-analysis",
         "h5py",
         "matplotlib",
         "numpy",
@@ -65,7 +65,7 @@ def _dependency_versions() -> Dict[str, Optional[str]]:
         "imageio",
         "imageio-ffmpeg",
     )
-    versions: Dict[str, Optional[str]] = {"blender-fuse": __version__}
+    versions: Dict[str, Optional[str]] = {"tissue-order-analysis": __version__}
     for name in names[1:]:
         try:
             versions[name] = metadata.version(name)

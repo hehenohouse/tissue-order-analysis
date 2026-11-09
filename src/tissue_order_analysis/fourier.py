@@ -271,7 +271,7 @@ def analyze_fourier_v2(
 
     return FourierV2Result(
         rect=tuple(int(value) for value in rect),
-        schema_version="blender-fuse.fourier-v2.v1",
+        schema_version="tissue-order-analysis.fourier-v2.v1",
         window=window,
         removed_mean=removed_mean,
         window_power_normalization=normalization,

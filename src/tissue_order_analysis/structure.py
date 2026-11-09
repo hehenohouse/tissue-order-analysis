@@ -101,7 +101,7 @@ def voronoi_neighbors(
 
     Neighbors are indices into ``points_rc``. With vertical periodicity, a
     neighbor reached across the seam maps back to its original region. The
-    boundary flag uses the same rule as :func:`blender_fuse.order.voronoi_boundary_mask`:
+    boundary flag uses the same rule as :func:`tissue_order_analysis.order.voronoi_boundary_mask`:
     an unbounded cell or a vertex outside the image (rows only when not periodic).
     """
 

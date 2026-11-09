@@ -1,6 +1,6 @@
-# Blender Fuse
+# Tissue Order Analysis
 
-Blender Fuse is an installable Python package and command-line tool for tissue-order analysis from HDF5 segmentation time series. It computes weighted Voronoi order parameters (ψₙ), segmentation quality control, spatial statistics, rectangular Fourier summaries, and optional PIVlab-driven ROI evolution.
+Tissue Order Analysis is an installable Python package and command-line tool for tissue-order analysis from HDF5 segmentation time series. It computes weighted Voronoi order parameters (ψₙ), segmentation quality control, spatial statistics, rectangular Fourier summaries, and optional PIVlab-driven ROI evolution.
 
 > **Research status:** version 0.2 is an alpha research package. Its outputs support quantitative exploration, but experimental settings and statistical assumptions must be validated for each dataset before biological conclusions are drawn.
 
@@ -27,17 +27,19 @@ python -m pip install ".[video]"
 The package can also be installed directly from GitHub:
 
 ```bash
-python -m pip install "blender-fuse @ git+https://github.com/hehenohouse/blender-fuse.git"
+python -m pip install "tissue-order-analysis @ git+https://github.com/hehenohouse/tissue-order-analysis.git"
 ```
 
-Blender Fuse supports Python 3.9 and newer.
+Tissue Order Analysis supports Python 3.9 and newer.
+
+> **Renamed from Blender Fuse.** The package was previously published as `blender-fuse` (import name `blender_fuse`). Uninstall it first (`python -m pip uninstall blender-fuse`), then update imports to `tissue_order_analysis`. The `blender-fuse` command remains as a deprecated alias of `tissue-order-analysis`, and profiles with the old `blender-fuse.analysis-profile.v1` schema still load. Older run checkpoints are not reused by `--resume`.
 
 ## Quick start
 
 ### Python API
 
 ```python
-from blender_fuse import AnalysisConfig, run_analysis
+from tissue_order_analysis import AnalysisConfig, run_analysis
 
 config = AnalysisConfig(
     data_dir="raw_data/23C",
@@ -59,7 +61,7 @@ print(result.output_dir)
 To analyze one file without writing anything:
 
 ```python
-from blender_fuse import AnalysisConfig, analyze_frame
+from tissue_order_analysis import AnalysisConfig, analyze_frame
 
 config = AnalysisConfig(data_dir="raw_data/23C", fourier_rect=None)
 frame = analyze_frame("raw_data/23C/sample_T0001_Simple Segmentation.h5", 1, config)
@@ -77,7 +79,7 @@ The numerical products are deliberately distinct:
 ### Command line
 
 ```bash
-blender-fuse analyze raw_data/23C --start 1 --end 150 \
+tissue-order-analysis analyze raw_data/23C --start 1 --end 150 \
   --fourier-rect 700 900 800 1000
 ```
 
@@ -107,7 +109,7 @@ Useful options include:
 Inspect all options with:
 
 ```bash
-blender-fuse analyze --help
+tissue-order-analysis analyze --help
 ```
 
 ### Strict JSON profiles
@@ -115,8 +117,8 @@ blender-fuse analyze --help
 A profile captures the effective scientific configuration without shell-specific quoting. Paths inside a profile are resolved relative to the profile file. Explicit CLI arguments override profile values; omitted CLI defaults do not leak into the profile.
 
 ```bash
-blender-fuse inspect --profile examples/profiles/analysis_v2.json
-blender-fuse analyze --profile examples/profiles/analysis_v2.json
+tissue-order-analysis inspect --profile examples/profiles/analysis_v2.json
+tissue-order-analysis analyze --profile examples/profiles/analysis_v2.json
 ```
 
 The profile format is versioned and rejects unknown fields and invalid JSON types. See `examples/profiles/analysis_v2.json` for a portable template. The Python helpers `load_analysis_profile` and `write_analysis_profile` provide the same strict conversion.
@@ -126,7 +128,7 @@ The profile format is versioned and rejects unknown fields and invalid JSON type
 `inspect` discovers files and reads H5 metadata without loading full pixel arrays or creating output directories, caches, manifests, or logs:
 
 ```bash
-blender-fuse inspect raw_data/23C --start 1 --end 150 \
+tissue-order-analysis inspect raw_data/23C --start 1 --end 150 \
   --fourier-rect 700 900 800 1000
 ```
 
@@ -137,7 +139,7 @@ Its JSON output reports selected timepoints and gaps, dataset names, stored/sque
 PIV vector-field frames can be rendered separately:
 
 ```bash
-blender-fuse piv-frames raw_data/PIV/PIVlab_23C.mat piv_frames
+tissue-order-analysis piv-frames raw_data/PIV/PIVlab_23C.mat piv_frames
 ```
 
 Historical launchers still work after installation:
@@ -161,7 +163,7 @@ The default filename pattern is:
 ...
 ```
 
-Blender Fuse recursively selects the first H5 dataset unless `dataset_name` is explicit. The selected dataset must:
+Tissue Order Analysis recursively selects the first H5 dataset unless `dataset_name` is explicit. The selected dataset must:
 
 - squeeze to exactly two dimensions;
 - have a numeric or Boolean dtype;
@@ -199,7 +201,7 @@ PIV ROI alignment is:
 Foreground pixels use 8-neighbor connectivity, matching the original two-dimensional `skimage.measure.label` behavior. Optional component filters are applied before ψ, smoothing, rectangular Fourier analysis, and ROI summaries:
 
 ```python
-from blender_fuse import AnalysisConfig, SegmentationFilterConfig
+from tissue_order_analysis import AnalysisConfig, SegmentationFilterConfig
 
 config = AnalysisConfig(
     data_dir="raw_data/23C",
@@ -259,7 +261,7 @@ The mean is over the **entire array after the DC slot is zeroed**, so that zeroe
 Fourier v2 is separate and opt-in:
 
 ```python
-from blender_fuse import AnalysisConfig, FourierV2Config
+from tissue_order_analysis import AnalysisConfig, FourierV2Config
 
 config = AnalysisConfig(
     data_dir="raw_data/23C",
@@ -385,7 +387,7 @@ The test suite builds temporary H5/MAT fixtures and synthetic lattices, so origi
 
 ```bash
 python -m ruff check .
-python -m pytest --cov=blender_fuse
+python -m pytest --cov=tissue_order_analysis
 python -m build
 ```
 
@@ -394,7 +396,7 @@ Tests cover periodic boundaries, legacy schemas, filtering/QC, physical-frequenc
 ## Repository layout
 
 ```text
-src/blender_fuse/          Installable package
+src/tissue_order_analysis/          Installable package
 examples/                  API examples and portable profiles
 tests/                     Synthetic automated tests
 legacy/code_2_original.py  Unsupported archival implementation

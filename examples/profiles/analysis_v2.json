@@ -1,5 +1,5 @@
 {
-  "schema_version": "blender-fuse.analysis-profile.v1",
+  "schema_version": "tissue-order-analysis.analysis-profile.v1",
   "analysis": {
     "data_dir": "../../raw_data/23C",
     "output_dir": "../../analysis_output_v2",

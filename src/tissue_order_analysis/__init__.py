@@ -1,4 +1,4 @@
-"""Public API for Blender Fuse."""
+"""Public API for Tissue Order Analysis."""
 
 from ._version import __version__
 from .config import (

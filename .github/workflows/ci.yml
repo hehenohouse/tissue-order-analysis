@@ -26,7 +26,7 @@ jobs:
       - name: Lint
         run: python -m ruff check .
       - name: Test
-        run: python -m pytest --cov=blender_fuse --cov-report=term-missing
+        run: python -m pytest --cov=tissue_order_analysis --cov-report=term-missing
       - name: Build distributions
         if: matrix.python-version == '3.11'
         run: python -m build

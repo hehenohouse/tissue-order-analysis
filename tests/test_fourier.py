@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from blender_fuse.fourier import (
+from tissue_order_analysis.fourier import (
     analyze_fourier,
     polygon_mask,
     reconstruct_selected_frequencies,

@@ -7,16 +7,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from blender_fuse import AnalysisConfig, analyze_frame
-from blender_fuse.config import SegmentationFilterConfig
-from blender_fuse.order import (
+from tissue_order_analysis import AnalysisConfig, analyze_frame
+from tissue_order_analysis.config import SegmentationFilterConfig
+from tissue_order_analysis.order import (
     compute_periodic_order_parameter,
     filter_labeled_components,
     label_segmentation,
     smooth_order_magnitudes,
     voronoi_boundary_mask,
 )
-from blender_fuse.statistics import (
+from tissue_order_analysis.statistics import (
     pearson_conclusion,
     spatial_block_bootstrap,
     spatial_statistics,

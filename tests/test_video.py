@@ -4,7 +4,7 @@ import imageio.v2 as imageio
 import numpy as np
 import pytest
 
-from blender_fuse.plotting import _as_uint8_rgb, create_video
+from tissue_order_analysis.plotting import _as_uint8_rgb, create_video
 
 
 def test_video_frame_normalization_handles_grayscale_and_rgba() -> None:

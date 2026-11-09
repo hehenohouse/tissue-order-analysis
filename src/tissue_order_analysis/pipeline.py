@@ -1,4 +1,4 @@
-"""Streaming orchestration for Blender Fuse analyses."""
+"""Streaming orchestration for Tissue Order Analysis analyses."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Static, accessible plotting helpers for Blender Fuse outputs."""
+"""Static, accessible plotting helpers for Tissue Order Analysis outputs."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ _BLUE_RAMP = (
 def sequential_blue_colormap() -> LinearSegmentedColormap:
     """Return the validated light-to-dark magnitude ramp."""
 
-    colormap = LinearSegmentedColormap.from_list("blender_fuse_blue", _BLUE_RAMP)
+    colormap = LinearSegmentedColormap.from_list("tissue_order_analysis_blue", _BLUE_RAMP)
     return colormap.with_extremes(bad=BASELINE)
 
 
@@ -721,7 +721,7 @@ def create_video(image_paths: Sequence[Path], output_path: Path, fps: float) -> 
         import imageio.v2 as imageio
     except ImportError as exc:
         raise RuntimeError(
-            "Video support is not installed; use `pip install blender-fuse[video]`."
+            "Video support is not installed; use `pip install tissue-order-analysis[video]`."
         ) from exc
 
     paths = [Path(path) for path in image_paths]

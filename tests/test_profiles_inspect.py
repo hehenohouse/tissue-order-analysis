@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from blender_fuse.cli import _build_config, build_parser, inspect_analysis
-from blender_fuse.profiles import PROFILE_SCHEMA_VERSION, load_analysis_profile
+from tissue_order_analysis.cli import _build_config, build_parser, inspect_analysis
+from tissue_order_analysis.profiles import PROFILE_SCHEMA_VERSION, load_analysis_profile
 
 
 def write_profile(path: Path, analysis: dict) -> Path:
@@ -100,7 +100,7 @@ def test_inspect_is_side_effect_free(tmp_path: Path, write_segmentation) -> None
 
 
 def test_inspect_cli_emits_json_without_outputs(tmp_path: Path, write_segmentation, capsys) -> None:
-    from blender_fuse.cli import main
+    from tissue_order_analysis.cli import main
 
     data_dir = tmp_path / "data"
     write_segmentation(data_dir, 2, [(4, 4)], shape=(12, 14))
@@ -116,15 +116,15 @@ def test_inspect_cli_emits_json_without_outputs(tmp_path: Path, write_segmentati
     )
     assert main(["inspect", "--profile", str(profile)]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == "blender-fuse.inspect.v1"
+    assert payload["schema_version"] == "tissue-order-analysis.inspect.v1"
     assert payload["timepoints"] == [2]
     assert payload["squeezed_shapes"] == [[12, 14]]
     assert not (tmp_path / "not-created").exists()
 
 
 def test_complete_profile_round_trip_preserves_nulls(tmp_path: Path) -> None:
-    from blender_fuse import AnalysisConfig
-    from blender_fuse.profiles import write_analysis_profile
+    from tissue_order_analysis import AnalysisConfig
+    from tissue_order_analysis.profiles import write_analysis_profile
 
     config = AnalysisConfig(
         data_dir=tmp_path / "data",
@@ -148,3 +148,21 @@ def test_no_fourier_rejects_any_v2_cli_option() -> None:
     )
     with pytest.raises(ValueError, match="conflicts"):
         _build_config(args)
+
+
+def test_profiles_written_before_the_rename_still_load(tmp_path) -> None:
+    import json
+
+    from tissue_order_analysis.profiles import load_analysis_profile
+
+    path = tmp_path / "old.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "blender-fuse.analysis-profile.v1",
+                "analysis": {"data_dir": "data", "n_fold": 4},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert load_analysis_profile(path).n_fold == 4
