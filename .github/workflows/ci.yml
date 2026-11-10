@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.11", "3.14"]
+        python-version: ["3.10", "3.12", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -28,5 +28,5 @@ jobs:
       - name: Test
         run: python -m pytest --cov=tissue_order_analysis --cov-report=term-missing
       - name: Build distributions
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.12'
         run: python -m build
