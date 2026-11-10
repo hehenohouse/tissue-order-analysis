@@ -30,7 +30,7 @@ The package can also be installed directly from GitHub:
 python -m pip install "tissue-order-analysis @ git+https://github.com/hehenohouse/tissue-order-analysis.git"
 ```
 
-Tissue Order Analysis supports Python 3.9 and newer.
+Tissue Order Analysis supports Python 3.10 and newer.
 
 > **Renamed from Blender Fuse.** The package was previously published as `blender-fuse` (import name `blender_fuse`). Uninstall it first (`python -m pip uninstall blender-fuse`), then update imports to `tissue_order_analysis`. The `blender-fuse` command remains as a deprecated alias of `tissue-order-analysis`, and profiles with the old `blender-fuse.analysis-profile.v1` schema still load. Older run checkpoints are not reused by `--resume`.
 
